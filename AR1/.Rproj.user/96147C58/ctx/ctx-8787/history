@@ -1,0 +1,512 @@
+col = c("blue", "slateblue", "red", "salmon", "mediumpurple", "purple"),
+lty = c(1, 3, 1, 3, 1, 3), lwd = 2)
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+head(unlist(rvgaw_results$mu))
+use_tempering
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+grad_llh
+grad
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+grad_llh_1
+grad
+grad_llh_1
+grad
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+grad_llh
+grad
+grad_llh
+grad
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+grad2_fd
+grad2
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+plot(unlist(rvgaw_results$mu), type = "l")
+plot(unlist(rvgae_results$mu), type = "l")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+plot(unlist(rvgaw_results$mu), type = "l")
+plot(unlist(rvgae_results$mu), type = "l")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+plot(unlist(rvgaw_results$mu), type = "l")
+plot(unlist(rvgae_results$mu), type = "l")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+if (phi >= 0.9) {
+margin <- 0.05
+} else {
+margin <- 0.1
+}
+plot(density(mcmce.post_samples), xlab = "phi", xlim = c(phi - margin, phi + margin),
+col = "blue", main = paste0("Posterior draws (series length = ", n, ")"),
+lwd = 2)
+lines(density(mcmcw.post_samples), col = "slateblue", lty = 3, lwd = 2)
+lines(density(rvgae.post_samples), col = "red", lwd = 2)
+lines(density(rvgaw.post_samples), col = "salmon", lty = 3, lwd = 2)
+lines(density(vbe.post_samples), col = "goldenrod", lwd = 2)
+lines(density(vbw.post_samples), col = "goldenrod", lty = 3, lwd = 2)
+abline(v = phi, col = "black", lty = 2, lwd = 2)
+legend("topright", legend = c("MCMC exact", "MCMC Whittle",
+"R-VGA exact",  "R-VGA Whittle",
+"Batch VB exact",  "Batch VB Whittle"),
+col = c("blue", "slateblue", "red", "salmon", "mediumpurple", "purple"),
+lty = c(1, 3, 1, 3, 1, 3), lwd = 2)
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+margin <- 0.1
+plot(density(mcmce.post_samples), xlab = "phi", xlim = c(phi - margin, phi + margin),
+col = "blue", main = paste0("Posterior draws (series length = ", n, ")"),
+lwd = 2)
+lines(density(mcmcw.post_samples), col = "slateblue", lty = 3, lwd = 2)
+lines(density(rvgae.post_samples), col = "red", lwd = 2)
+lines(density(rvgaw.post_samples), col = "salmon", lty = 3, lwd = 2)
+lines(density(vbe.post_samples), col = "goldenrod", lwd = 2)
+lines(density(vbw.post_samples), col = "goldenrod", lty = 3, lwd = 2)
+abline(v = phi, col = "black", lty = 2, lwd = 2)
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+legend("topright", legend = c("MCMC exact", "MCMC Whittle",
+"R-VGA exact",  "R-VGA Whittle",
+"Batch VB exact",  "Batch VB Whittle"),
+col = c("blue", "slateblue", "red", "salmon", "goldenrod", "goldenrod"),
+lty = c(1, 3, 1, 3, 1, 3), lwd = 2)
+plot(density(mcmce.post_samples), xlab = "phi", xlim = c(phi - margin, phi + margin),
+col = "blue", main = paste0("Posterior draws (series length = ", n, ")"),
+lwd = 2)
+lines(density(mcmcw.post_samples), col = "slateblue", lty = 3, lwd = 2)
+lines(density(rvgae.post_samples), col = "red", lwd = 2)
+lines(density(rvgaw.post_samples), col = "red", lty = 3, lwd = 2)
+lines(density(vbe.post_samples), col = "goldenrod", lwd = 2)
+lines(density(vbw.post_samples), col = "goldenrod", lty = 3, lwd = 2)
+abline(v = phi, col = "black", lty = 2, lwd = 2)
+legend("topright", legend = c("MCMC exact", "MCMC Whittle",
+"R-VGA exact",  "R-VGA Whittle",
+"Batch VB exact",  "Batch VB Whittle"),
+col = c("blue", "slateblue", "red", "red", "goldenrod", "goldenrod"),
+lty = c(1, 3, 1, 3, 1, 3), lwd = 2)
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+plot(unlist(rvgaw_results$mu), type = "l")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/mcmc_whittle.R")
+source("~/R-VGA-whittle/AR1/batchvb_whittle.R")
+source("~/R-VGA-whittle/AR1/batchvb_whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+warnings()
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+margin <- 0.1
+plot(density(mcmce.post_samples), xlab = "phi", xlim = c(phi - margin, phi + margin),
+col = "blue", main = paste0("Posterior draws (series length = ", n, ")"),
+lwd = 2)
+lines(density(mcmcw.post_samples), col = "slateblue", lty = 3, lwd = 2)
+lines(density(rvgae.post_samples), col = "red", lwd = 2)
+lines(density(rvgaw.post_samples), col = "red", lty = 3, lwd = 2)
+lines(density(vbe.post_samples), col = "goldenrod", lwd = 2)
+lines(density(vbw.post_samples), col = "goldenrod", lty = 3, lwd = 2)
+abline(v = phi, col = "black", lty = 2, lwd = 2)
+legend("topright", legend = c("MCMC exact", "MCMC Whittle",
+"R-VGA exact",  "R-VGA Whittle",
+"Batch VB exact",  "Batch VB Whittle"),
+col = c("blue", "slateblue", "red", "red", "goldenrod", "goldenrod"),
+lty = c(1, 3, 1, 3, 1, 3), lwd = 2)
+margin <- 0.02
+plot(density(mcmce.post_samples), xlab = "phi", xlim = c(phi - margin, phi + margin),
+col = "blue", main = paste0("Posterior draws (series length = ", n, ")"),
+lwd = 2)
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+plot(unlist(rvgaw_results$mu), type = "l")
+plot(unlist(rvgae_results$mu), type = "l")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+margin <- 0.02
+lines(density(mcmcw.post_samples), col = "slateblue", lty = 3, lwd = 2)
+plot(density(mcmce.post_samples), xlab = "phi", xlim = c(phi - margin, phi + margin),
+col = "blue", main = paste0("Posterior draws (series length = ", n, ")"),
+lwd = 2)
+lines(density(rvgae.post_samples), col = "red", lwd = 2)
+lines(density(rvgaw.post_samples), col = "red", lty = 3, lwd = 2)
+lines(density(vbe.post_samples), col = "goldenrod", lwd = 2)
+lines(density(vbw.post_samples), col = "goldenrod", lty = 3, lwd = 2)
+abline(v = phi, col = "black", lty = 2, lwd = 2)
+legend("topright", legend = c("MCMC exact", "MCMC Whittle",
+"R-VGA exact",  "R-VGA Whittle",
+"Batch VB exact",  "Batch VB Whittle"),
+col = c("blue", "slateblue", "red", "red", "goldenrod", "goldenrod"),
+lty = c(1, 3, 1, 3, 1, 3), lwd = 2)
+phi
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+n_temper
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+margin <- 0.1
+plot(density(mcmce.post_samples), xlab = "phi", xlim = c(phi - margin, phi + margin),
+col = "blue", main = paste0("Posterior draws (series length = ", n, ")"),
+lwd = 2)
+lines(density(mcmcw.post_samples), col = "slateblue", lty = 3, lwd = 2)
+lines(density(rvgae.post_samples), col = "red", lwd = 2)
+lines(density(rvgaw.post_samples), col = "red", lty = 3, lwd = 2)
+lines(density(vbe.post_samples), col = "goldenrod", lwd = 2)
+lines(density(vbw.post_samples), col = "goldenrod", lty = 3, lwd = 2)
+abline(v = phi, col = "black", lty = 2, lwd = 2)
+legend("topright", legend = c("MCMC exact", "MCMC Whittle",
+"R-VGA exact",  "R-VGA Whittle",
+"Batch VB exact",  "Batch VB Whittle"),
+col = c("blue", "slateblue", "red", "red", "goldenrod", "goldenrod"),
+lty = c(1, 3, 1, 3, 1, 3), lwd = 2)
+phi
+source("~/R-VGAL/1_Linear/linear_mm_main.R")
+getwd()
+## Structure of the code:
+## 1. Regenerate data
+## 2. Run R-VGAL with estimated gradients/Hessians
+## 3. Run R-VGAL with theoretical gradients/Hessians
+## 4. Run HMC
+setwd("~/R-VGAL/Linear/")
+## Structure of the code:
+## 1. Regenerate data
+## 2. Run R-VGAL with estimated gradients/Hessians
+## 3. Run R-VGAL with theoretical gradients/Hessians
+## 4. Run HMC
+setwd("~/R-VGAL/1_Linear/")
+source("~/R-VGAL/1_Linear/linear_mm_main.R")
+source("~/R-VGAL/1_Linear/linear_mm_main.R")
+source("~/R-VGAL/2_Logistic/logistic_mm_main.R")
+setwd("~/Six_city")
+setwd("~/3_Sixcity")
+setwd("~/R-VGA/3_Sixcity/")
+setwd("~/R-VGAL/3_Sixcity/")
+source("~/R-VGAL/3_Sixcity/sixcity_main.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+warnings()
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+n
+warnings()
+P_0
+prec[[1]]
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+phi
+warnings()
+source("~/R-VGA-whittle/AR1/rvgae.R")
+##############################################
+##      Batch VB with exact likelihood      ##
+##############################################
+vbe_filepath <- paste0(result_directory, "vb_exact_results_n", n,
+"_phi", phi_string, "_", date, ".rds")
+if (rerun_vbe) {
+} else {
+vbe_results <- readRDS(vbe_filepath)
+}
+vbe.post_samples <- vbe_results$post_samples
+rerun_vbe <- F
+##############################################
+##      Batch VB with exact likelihood      ##
+##############################################
+vbe_filepath <- paste0(result_directory, "vb_exact_results_n", n,
+"_phi", phi_string, "_", date, ".rds")
+if (rerun_vbe) {
+} else {
+vbe_results <- readRDS(vbe_filepath)
+}
+vbe.post_samples <- vbe_results$post_samples
+## Plot posterior densities ##
+plot(density(vbe.post_samples), col = "goldenrod")
+lines(density(rvgae.post_samples), col = "red")
+abline(v = phi, lty = 2)
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+prec_temp
+mu_temp
+mu_temp
+prec_temp
+E_hessian
+E_grad
+use_matlab_deriv
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+warnings()
+source("~/R-VGA-whittle/AR1/rvgae.R")
+prec_temp
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+plot(unlist(mu_vals), type = "l")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+E_hessian
+tanh(0.1)^2
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+use_temperiong
+use_tempering
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+use_tempering
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+plot(density(rvgae.post_samples))
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+source("~/R-VGA-whittle/AR1/rvgae.R")
+plot(density(rvgae.post_samples))
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+warnings()
+phi
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+length(rvgae.mu_vals)
+## Plot posterior
+rvgae.post_var <- solve(rvgae.prec[[length(rvgae.mu_vals)]])
+rvgae.post_samples <- tanh(rnorm(10000, rvgae.mu_vals[[length(rvgae.mu_vals)]], sqrt(rvgae.post_var)))
+## Save results
+rvgae_results <- list(mu = rvgae.mu_vals,
+prec = rvgae.prec,
+post_samples = rvgae.post_samples,
+S = S,
+use_tempering = use_tempering,
+temper_schedule = temper_schedule,
+time_elapsed = rvgae.t2 - rvgae.t1)
+save_rvgae_results
+if (save_rvgae_results) {
+saveRDS(rvgae_results, rvgae_filepath)
+}
+if (rerun_rvgae) {
+print("Starting exact R-VGAL...")
+rvgae.t1 <- proc.time()
+for (t in 1:length(x)) {
+a_vals <- 1
+if (use_tempering) {
+if (t <= n_temper) { # only temper the first n_temper observations
+a_vals <- temper_schedule
+}
+}
+mu_temp <- rvgae.mu_vals[[t]]
+prec_temp <- rvgae.prec[[t]]
+for (v in 1:length(a_vals)) {
+a <- a_vals[v]
+P <- 1/prec_temp
+# P <- chol2inv(chol(prec_temp))
+samples <- rnorm(S, mu_temp, sqrt(P))
+grads <- list()
+hessian <- list()
+# Calculate Fourier transform of the series here
+for (s in 1:S) {
+theta_s <- samples[s]
+phi_s <- tanh(theta_s)
+## Calculate the spectral density of an AR(1) -- turn this into a function later
+if (t == 1) {
+if (use_matlab_deriv) {
+# grad <- - phi_s - (x[t]^2*phi_s*(phi_s^2 - 1))/sigma_e^2
+grad <- - tanh(theta_s) - (x[1]^2*tanh(theta_s)*(tanh(theta_s)^2 - 1))/sigma_e^2
+grad2 <- tanh(theta_s)^2 + (x[1]^2*(tanh(theta_s)^2 - 1)^2)/sigma_e^2 +
+(2*x[1]^2*tanh(theta_s)^2*(tanh(theta_s)^2 - 1))/sigma_e^2 - 1
+} else {
+grad <- - phi_s + x[t]^1 / sigma_e^2 * phi_s * (1 - phi_s^2)
+grad2 <- phi_s^2 - 1 + x[t]^1 / sigma_e^2 * ( (1 - phi_s^2)^2 - 2 * phi_s^2 * (1 - phi_s^2) )
+}
+} else {
+if (use_matlab_deriv) {
+# grad <- -(x[t-1]*(x[t] - x[t-1]*phi_s)*(phi_s^2 - 1))/sigma_e^2
+# grad2 <- (2*x[t-1]*phi_s*(x[t] - x[t-1]*phi_s)*(phi_s^2 - 1))/sigma_e^2 -
+#   (x[t-1]^2*(phi_s^2 - 1)^2)/sigma_e^2
+grad <- -(x[t-1]*(x[t] - x[t-1]*tanh(theta_s))*(tanh(theta_s)^2 - 1))/sigma_e^2
+grad2 <- (2*x[t-1]*tanh(theta_s)*(x[t] - x[t-1]*tanh(theta_s))*(tanh(theta_s)^2 - 1))/sigma_e^2 -
+(x[t]^2*(tanh(theta_s)^2 - 1)^2)/sigma_e^2
+} else {
+grad <- 1/sigma_e^2 * (x[t] - phi_s * x[t-1]) * x[t-1] * (1 - phi_s^2)
+grad2 <- - x[t-1]^2/sigma_e^2 * (1 - phi_s^2)^2 -
+2 * x[t-1] / sigma_e^2 * phi_s * (1 - phi_s^2) * (x[t] - phi_s * x[t-1])
+## Check 2nd derivative with finite difference
+# incr <- 1e-07
+# theta_add <- theta_s + incr
+#
+# f_theta <- 1/sigma_e^2 * (x[t] - tanh(theta_s) * x[t-1]) * x[t-1] * (1 - tanh(theta_s)^2)
+# f_theta_add <- 1/sigma_e^2 * (x[t] - tanh(theta_add) * x[t-1]) * x[t-1] * (1 - tanh(theta_add)^2)
+#
+# grad2_fd <- (f_theta_add - f_theta) / incr
+}
+}
+grads[[s]] <- grad #grad_phi_fd
+hessian[[s]] <- grad2 #grad_phi_2_fd #x
+}
+E_grad <- Reduce("+", grads)/ length(grads)
+E_hessian <- Reduce("+", hessian)/ length(hessian)
+prec_temp <- prec_temp - a * E_hessian
+# mu_temp <- mu_temp + chol2inv(chol(prec_temp)) %*% (a * as.matrix(E_grad_logW))
+mu_temp <- mu_temp + 1/prec_temp * (a * E_grad)
+}
+rvgae.prec[[t+1]] <- prec_temp
+rvgae.mu_vals[[t+1]] <- mu_temp
+if (t %% floor(length(x)/10) == 0) {
+cat(floor(t/length(x) * 100), "% complete \n")
+}
+}
+rvgae.t2 <- proc.time()
+browser()
+## Plot posterior
+rvgae.post_var <- solve(rvgae.prec[[length(rvgae.mu_vals)]])
+rvgae.post_samples <- tanh(rnorm(10000, rvgae.mu_vals[[length(rvgae.mu_vals)]], sqrt(rvgae.post_var)))
+## Save results
+rvgae_results <- list(mu = rvgae.mu_vals,
+prec = rvgae.prec,
+post_samples = rvgae.post_samples,
+S = S,
+use_tempering = use_tempering,
+temper_schedule = temper_schedule,
+time_elapsed = rvgae.t2 - rvgae.t1)
+if (save_rvgae_results) {
+saveRDS(rvgae_results, rvgae_filepath)
+}
+} else {
+rvgae_results <- readRDS(rvgae_filepath)
+}
+rvgae.post_samples <- rvgae_results$post_samples
+##############################################
+##      Batch VB with exact likelihood      ##
+##############################################
+vbe_filepath <- paste0(result_directory, "vb_exact_results_n", n,
+"_phi", phi_string, "_", date, ".rds")
+if (rerun_vbe) {
+} else {
+vbe_results <- readRDS(vbe_filepath)
+}
+# vbe.post_samples <- rnorm(n_post_samples,
+#                           vbe_results$mu[[length(vbe_results$mu)]],
+#                           sqrt(vbe_results$sigma[[length(vbe_results$sigma)]]))
+vbe.post_samples <- vbe_results$post_samples
+##############################################
+##     Batch VB with Whittle likelihood     ##
+##############################################
+vbw_filepath <- paste0(result_directory, "vb_whittle_results_n", n,
+"_phi", phi_string, "_", date, ".rds")
+if (rerun_vbw) {
+} else {
+vbw_results <- readRDS(vbw_filepath)
+}
+# vbw.post_samples <- rnorm(n_post_samples,
+#                           vbw_results$mu[[length(vbw_results$mu)]],
+#                           sqrt(vbw_results$sigma[[length(vbw_results$sigma)]]))
+vbw.post_samples <- vbw_results$post_samples
+##############################################
+##        MCMC with Whittle likelihood      ##
+##############################################
+mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_results_n", n,
+"_phi", phi_string, "_", date, ".rds")
+if (rerun_mcmc_whittle) {
+print("Starting MCMC with Whittle likelihood...")
+mcmcw_results <- run_mcmc_ar1(series = x, sigma_e =  sigma_e,
+iters = MCMC_iters, burn_in = burn_in,
+prior_mean = 0, prior_var = 1,
+adapt_proposal = T, use_whittle_likelihood = T)
+if (save_mcmcw_results) {
+saveRDS(mcmcw_results, mcmcw_filepath)
+}
+} else {
+mcmcw_results <- readRDS(mcmcw_filepath)
+}
+mcmcw.post_samples <- as.mcmc(mcmcw_results$post_samples[-(1:burn_in)])
+##############################################
+##        MCMC with exact likelihood      ##
+##############################################
+mcmce_filepath <- paste0(result_directory, "mcmc_exact_results_n", n,
+"_phi", phi_string, "_", date, ".rds")
+if (rerun_mcmc_exact) {
+print("Starting MCMC with exact likelihood...")
+mcmce_results <- run_mcmc_ar1(series = x, sigma_e =  sigma_e,
+iters = MCMC_iters, burn_in = burn_in,
+prior_mean = 0, prior_var = 1,
+adapt_proposal = T, use_whittle_likelihood = F)
+if (save_mcmce_results) {
+saveRDS(mcmce_results, mcmce_filepath)
+}
+} else {
+mcmce_results <- readRDS(mcmce_filepath)
+}
+mcmce.post_samples <- as.mcmc(mcmce_results$post_samples[-(1:burn_in)])
+# Trace plot
+# traceplot(mcmcw.post_samples, main = "Trace plot")
+## Compare with exact likelihood
+# mcmce_results <- readRDS(file = paste0(result_directory, "mcmc_gaussian_results_n", n, "_", date, ".rds"))
+# gaussian_mcmc_post_samples <- gaussian_mcmc_results$post_samples[-(1:burn_in)]
+if (phi >= 0.95) {
+margin <- 0.05
+} else {
+margin <- 0.1
+}
+plot(density(mcmce.post_samples), xlab = "phi", xlim = c(phi - margin, phi + margin),
+col = "blue", main = paste0("Posterior draws (series length = ", n, ")"),
+lwd = 2)
+lines(density(mcmcw.post_samples), col = "slateblue", lty = 3, lwd = 2)
+lines(density(rvgae.post_samples), col = "red", lwd = 2)
+lines(density(rvgaw.post_samples), col = "red", lty = 3, lwd = 2)
+lines(density(vbe.post_samples), col = "goldenrod", lwd = 2)
+lines(density(vbw.post_samples), col = "goldenrod", lty = 3, lwd = 2)
+abline(v = phi, col = "black", lty = 2, lwd = 2)
+legend("topright", legend = c("MCMC exact", "MCMC Whittle",
+"R-VGA exact",  "R-VGA Whittle",
+"Batch VB exact",  "Batch VB Whittle"),
+col = c("blue", "slateblue", "red", "red", "goldenrod", "goldenrod"),
+lty = c(1, 3, 1, 3, 1, 3), lwd = 2)
+if (save_plots) {
+png(paste0("./plots/rvga_mcmc_whittle_results_n", n, "_phi", phi_string, temper_info, "_1.png"), width = 600, height = 450)
+plot(density(mcmce.post_samples), xlab = "phi", xlim = c(phi - margin, phi + margin),
+col = "blue", main = paste0("Posterior draws (series length = ", n, ")"),
+lwd = 2)
+lines(density(mcmcw.post_samples), col = "slateblue", lty = 2, lwd = 2)
+lines(density(rvgae.post_samples), col = "red", lwd = 2)
+lines(density(rvgaw.post_samples), col = "red", lty = 2, lwd = 2)
+lines(density(vbe.post_samples), col = "goldenrod", lwd = 2)
+lines(density(vbw.post_samples), col = "goldenrod", lty = 2, lwd = 2)
+abline(v = phi, col = "black", lty = 2, lwd = 2)
+legend("topright", legend = c("MCMC exact", "MCMC Whittle",
+"R-VGA exact",  "R-VGA Whittle",
+"Batch VB exact",  "Batch VB Whittle"),
+col = c("blue", "slateblue", "red", "red", "goldenrod", "goldenrod"),
+lty = c(1, 2, 1, 2, 1, 2), lwd = 2)
+dev.off()
+}
+#######################################
+#      MCMC: INSPECT EFFICIENCY      ##
+#######################################
+# Get autocorrelation from CODA
+autocorr(mcmcw.post_samples, lags = c(0, 1, 5, 10, 50), relative=TRUE)
+lag.max <- 20
+# ask <- FALSE;
+# autocorr.plot(draws, lag.max, auto.layout = TRUE, ask)
+# dev.off()
+# Effective sample size and inefficiency factors
+# Compute effective sample size (ESS). This is of course done after burn-in
+ESS <- effectiveSize(mcmcw.post_samples)
+cat("ESS =", ESS)
+# Compute Inefficiency factor
+# IF <- dim(draws)[1]/ESS
+# print(IF)
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGA-whittle/AR1/rvga-whittle.R")
+source("~/R-VGAL/1_Linear/linear_mm_main.R")
+getwd()
+setwd("~/R-VGAL/1_Linear/")
+source("~/R-VGAL/1_Linear/linear_mm_main.R")
+?reticulate::conda_export
+source("~/R-VGAL/1_Linear/linear_mm_main.R")
+source("~/R-VGAL/1_Linear/linear_mm_main.R")
+source("~/R-VGAL/1_Linear/linear_mm_main.R")
+source("~/R-VGAL/1_Linear/linear_mm_main.R")
