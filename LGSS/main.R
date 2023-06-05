@@ -1,4 +1,4 @@
-setwd("~/R-VGA-whittle/LGSS/")
+setwd("~/R-VGA-Whittle/LGSS/")
 rm(list = ls())
 
 # library("mvtnorm")
@@ -32,9 +32,9 @@ transform <- "logit"
 adapt_proposal <- T
 
 ## True parameters
-sigma_eps <- 0.1 # measurement error var
+sigma_eps <- 0.5 # measurement error var
 sigma_eta <- 0.9 # process error var
-phi <- 0.9
+phi <- 0.99
 
 ## For the result filename
 phi_string <- sub("(\\d+)\\.(\\d+)", "\\1\\2", toString(phi)) ## removes decimal point fron the number
@@ -75,7 +75,7 @@ if (regenerate_data) {
 }
 
 ## MCMC settings
-burn_in <- 1000
+burn_in <- 5000
 n_post_samples <- 10000
 MCMC_iters <- n_post_samples + burn_in # Number of MCMC iterations
 accept <- rep(0, MCMC_iters)
@@ -91,40 +91,49 @@ state_ini_mean <- 0
 state_ini_var <- 1
 
 # ## Test the likelihood computation by plotting likelihood surface over a grid of parameter values
-# phi_grid <- seq(-1, 1, length.out = 200)
-# likelihood_whittle <- c()
-# likelihood_exact <- c()
-# 
-# for (i in 1:length(phi_grid)) {
-#   params_list <- list(phi = phi_grid[i], sigma_eta = sigma_eta, sigma_eps = sigma_eps)
-#   # if (use_whittle_likelihood) {
-#   likelihood_whittle[i] <- compute_whittle_likelihood_lgss(y = y, params = params_list)
-#   # } else {
-#   kf_out <- compute_kf_likelihood(state_prior_mean = state_ini_mean,
-#                                   state_prior_var = state_ini_var,
-#                                   iters = length(y), observations = y,
-#                                   params = params_list)
-# 
-#   likelihood_exact[i] <- kf_out$log_likelihood
-#   # }
-# }
-# par(mfrow = c(2,1))
-# margin <- 20
-# plot_range <- (which.max(likelihood_exact) - margin):(which.max(likelihood_exact) + margin)
-# plot(phi_grid[plot_range], likelihood_exact[plot_range], type = "l",
-#      xlab = "phi", ylab = "log likelihood", main = "Exact likelihood")
-# legend("topleft", legend = c("true value", "arg max llh"),
-#        col = c("black", "red"), lty = 2, cex = 0.5)
-# abline(v = phi_grid[which.max(likelihood_exact)], lty = 1, col = "red")
-# abline(v = phi, lty = 2)
-# 
-# plot(phi_grid[plot_range], likelihood_whittle[plot_range], type = "l",
-#      xlab = "phi", ylab = "log likelihood", main = "Whittle likelihood")
-# legend("topleft", legend = c("true value", "arg max llh"),
-#        col = c("black", "red"), lty = 2, cex = 0.5)
-# abline(v = phi_grid[which.max(likelihood_whittle)], lty = 1, col = "red")
-# abline(v = phi, lty = 2)
+phi_grid <- seq(-1, 1, length.out = 200)
+likelihood_whittle <- c()
+likelihood_exact <- c()
 
+for (i in 1:length(phi_grid)) {
+  params_list <- list(phi = phi_grid[i], sigma_eta = sigma_eta, sigma_eps = sigma_eps)
+  # if (use_whittle_likelihood) {
+  likelihood_whittle[i] <- compute_whittle_likelihood_lgss(y = y, params = params_list)
+  # } else {
+  kf_out <- compute_kf_likelihood(state_prior_mean = state_ini_mean,
+                                  state_prior_var = state_ini_var,
+                                  iters = length(y), observations = y,
+                                  params = params_list)
+
+  likelihood_exact[i] <- kf_out$log_likelihood
+  # }
+}
+par(mfrow = c(2,1))
+margin <- 20
+plot_range <- (which.max(likelihood_exact) - margin):(which.max(likelihood_exact) + margin)
+plot(phi_grid[plot_range], likelihood_exact[plot_range], type = "l",
+     xlab = "phi", ylab = "log likelihood", main = paste0("Exact likelihood (n = ", n, ")"))
+legend("topleft", legend = c("true value", "arg max llh"),
+       col = c("black", "red"), lty = 2, cex = 0.5)
+abline(v = phi_grid[which.max(likelihood_exact)], lty = 1, col = "red")
+abline(v = phi, lty = 2)
+
+plot(phi_grid[plot_range], likelihood_whittle[plot_range], type = "l",
+     xlab = "phi", ylab = "log likelihood", main = paste0("Whittle likelihood (n = ", n, ")"))
+legend("topleft", legend = c("true value", "arg max llh"),
+       col = c("black", "red"), lty = 2, cex = 0.5)
+abline(v = phi_grid[which.max(likelihood_whittle)], lty = 1, col = "red")
+abline(v = phi, lty = 2)
+
+## Sample from prior to see if values of phi are reasonable
+# theta_samples <- rnorm(10000, prior_mean, prior_var)
+# if (transform == "arctanh") {
+#   phi_samples <- tanh(theta_samples)
+# } else {
+#   phi_samples <- exp(theta_samples) / (1 + exp(theta_samples))
+# }
+# 
+# hist(phi_samples, main = "Samples from the prior of phi")
 ################################################################################
 ##                      R-VGA with Whittle likelihood                         ##
 ################################################################################
@@ -143,7 +152,7 @@ if (reorder_freq) {
   reorder_info <- ""
 }
 
-rvgaw_filepath <- paste0(result_directory, "rvga_whittle_results_n", n, 
+rvgaw_filepath <- paste0(result_directory, "rvga_whittle_results_", transform, "_n", n, 
                          "_phi", phi_string, temper_info, reorder_info, "_", date, ".rds")
 
 

@@ -1,4 +1,4 @@
-setwd("~/R-VGA-whittle/AR1")
+setwd("~/R-VGA-Whittle/AR1")
 
 ## R-VGA with Whittle likelihood (R-VGAW)?
 rm(list = ls())
