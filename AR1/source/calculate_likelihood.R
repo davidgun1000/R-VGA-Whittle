@@ -1,4 +1,4 @@
-calculate_whittle_likelihood <- function(series, phi, sigma_e) {
+calculate_whittle_likelihood <- function(series, phi, sigma_e = NULL) {
   n <- length(series)
   
   ## Calculate the spectral density of an AR(1)
@@ -11,6 +11,8 @@ calculate_whittle_likelihood <- function(series, phi, sigma_e) {
   ## Fourier transform of the series
   fourier_transf <- fft(x)
   I_omega <- 1/n * Mod(fourier_transf)^2
+  # I_omega <- 1/(2*pi*n) * Mod(fourier_transf)^2
+  
   
   ## Calculate the Whittle likelihood
   part1 <- log(spectral_dens)

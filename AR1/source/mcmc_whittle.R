@@ -16,7 +16,7 @@ save_results <- F
 save_plots <- F
 
 ## Parameters 
-phi <- 0.99
+phi <- 0.9
 sigma_e <- 0.5
 n <- 10000 # time series length
 

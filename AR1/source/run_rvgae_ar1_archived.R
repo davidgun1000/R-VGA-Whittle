@@ -49,7 +49,7 @@ run_rvgae_ar1 <- function(series, phi = NULL, sigma_e = NULL,
         if (t == 1) {
           
           if (use_matlab_deriv) {
-            # grad <- - phi_s - (x[t]^2*phi_s*(phi_s^2 - 1))/sigma_e^2
+            # 
             
             grad <- - tanh(theta_s) - (x[1]^2*tanh(theta_s)*(tanh(theta_s)^2 - 1))/sigma_e^2
             

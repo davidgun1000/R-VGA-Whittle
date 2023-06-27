@@ -1,5 +1,6 @@
 run_rvgaw_ar1 <- function(series, phi = NULL, sigma_e = NULL, 
                           prior_mean = 0, prior_var = 1, S = 500,
+                          n_post_samples = 10000, 
                           use_tempering = T, n_temper = 100, 
                           temper_schedule = rep(1/10, 10),
                           reorder_freq = F, reorder_seed = NULL,
@@ -12,22 +13,31 @@ run_rvgaw_ar1 <- function(series, phi = NULL, sigma_e = NULL,
   
   x <- series
   n <- length(x)
+  param_dim <- length(prior_mean)
+  
+  if (param_dim == 1 && is.null(sigma_e)) {
+    stop("sigma_e is not specified")
+  }
   
   rvgaw.mu_vals <- list()
   rvgaw.mu_vals[[1]] <- prior_mean
   
   rvgaw.prec <- list()
-  rvgaw.prec[[1]] <- 1/prior_var #chol2inv(chol(P_0))
+  if (param_dim > 1) {
+    rvgaw.prec[[1]] <- chol2inv(chol(prior_var))
+  } else {
+    rvgaw.prec[[1]] <- 1/prior_var #chol2inv(chol(P_0))
+  }
   
   ## Fourier frequencies
-  k <- seq(-ceiling(n/2)+1, floor(n/2), 1)
-  k_in_likelihood <- k[k >= 1 & k <= floor((n-1)/2)]
+  k_in_likelihood <- seq(1, floor((n-1)/2)) 
   freq <- 2 * pi * k_in_likelihood / n
   
   ## Fourier transform of the series
   fourier_transf <- fft(x)
   periodogram <- 1/n * Mod(fourier_transf)^2
   I <- periodogram[k_in_likelihood + 1]
+  # I <- 1/(2*pi) * periodogram[k_in_likelihood + 1]
   
   if (reorder_freq) { # randomise order of frequencies and periodogram components
     
@@ -66,9 +76,13 @@ run_rvgaw_ar1 <- function(series, phi = NULL, sigma_e = NULL,
       
       a <- a_vals[v]
       
-      P <- 1/prec_temp
-      # P <- chol2inv(chol(prec_temp))
-      samples <- rnorm(S, mu_temp, sqrt(P))
+      if (param_dim > 1) {
+        P <- solve(prec_temp) #chol2inv(chol(prec_temp))
+        samples <- rmvnorm(S, mu_temp, P)
+      } else {
+        P <- 1/prec_temp
+        samples <- rnorm(S, mu_temp, sqrt(P))
+      }
       
       grads <- list()
       hessian <- list()
@@ -77,26 +91,75 @@ run_rvgaw_ar1 <- function(series, phi = NULL, sigma_e = NULL,
       
       for (s in 1:S) {
         
-        theta_s <- samples[s]
-        phi_s <- tanh(theta_s)
-        
-        if (use_matlab_deriv) { ## MATLAB derivatives:
+        if (param_dim > 1) {
+          theta_s <- samples[s, ]
+          theta_phi_s <- theta_s[1]
+          theta_sigma_s <- theta_s[2]
+          phi_s <- tanh(theta_phi_s) 
           
           if (transform == "arctanh") {
+            
             # First derivative
-            grad_logW <- - ((2 * cos(freq[i]) - 2 * tanh(theta_s)) * (1 - tanh(theta_s)^2) ) /
-              (1 + tanh(theta_s)^2 - 2 * tanh(theta_s) * cos(freq[i])) - 
-              I[[i]] * (1/sigma_e^2 * (2 * tanh(theta_s) - 2 * cos(freq[i])) * (1 - tanh(theta_s)^2))
+            grad_theta_phi <- (2*cos(freq[i])*(tanh(theta_phi_s)^2 - 1) -
+                                 2*tanh(theta_phi_s)*(tanh(theta_phi_s)^2 - 1)) /
+              (tanh(theta_phi_s)^2 - 2*cos(freq[i])*tanh(theta_phi_s) + 1) -
+              I[[i]]*exp(-theta_sigma_s)*(2*cos(freq[i])*(tanh(theta_phi_s)^2 - 1) -
+                                            2*tanh(theta_phi_s)*(tanh(theta_phi_s)^2 - 1))
+            
+            grad_theta_sigma <- I[[i]]*exp(-theta_sigma_s)*(tanh(theta_phi_s)^2 - 2*cos(freq[i])*tanh(theta_phi_s) + 1) - 1
+            
+            grad_logW <- c(grad_theta_phi, grad_theta_sigma) 
             
             # Second derivative
-            grad2_logW <- (2*(phi_s^2 - 1)^2 + 4*phi_s^2*(phi_s^2 - 1) - 
-                             4*cos(freq[i])*phi_s*(phi_s^2 - 1))/(phi_s^2 - 2*cos(freq[i])*phi_s + 1) - 
-              (2*cos(freq[i])*(phi_s^2 - 1) - 2*phi_s*(phi_s^2 - 1))^2/
-              (- 2*cos(freq[i])*phi_s + phi_s^2 + 1)^2 - 
-              (I[[i]]*(2*(phi_s^2 - 1)^2 + 4*phi_s^2*(phi_s^2 - 1) - 
-                         4*cos(freq[i])*phi_s*(phi_s^2 - 1)))/sigma_e^2
+            grad2_theta_phi <- 2 * I[[i]] * exp(-theta_sigma_s) * (tanh(theta_phi_s)^2 - 1) *
+              (2*cos(freq[i])*tanh(theta_phi_s) - 3*tanh(theta_phi_s)^2 + 1) -
+              (4*(cos(freq[i]) - tanh(theta_phi_s))^2 * (tanh(theta_phi_s)^2 - 1)^2) /
+              (tanh(theta_phi_s)^2 - 2*cos(freq[i]) * tanh(theta_phi_s) + 1)^2 -
+              (2*(tanh(theta_phi_s)^2 - 1) * (2*cos(freq[i])*tanh(theta_phi_s) -
+                                                3*tanh(theta_phi_s)^2 + 1)) /
+              (tanh(theta_phi_s)^2 - 2*cos(freq[i])*tanh(theta_phi_s) + 1)
             
-          } else {
+            grad2_theta_sigma <- -I[[i]] * exp(-theta_sigma_s) *
+              (tanh(theta_phi_s)^2 - 2*cos(freq[i])*tanh(theta_phi_s) + 1)
+            
+            grad_theta_phi_theta_sigma <- 2 * I[[i]] * exp(-theta_sigma_s) *
+              (cos(freq[i]) - tanh(theta_phi_s)) * (tanh(theta_phi_s)^2 - 1)
+            
+            grad2_logW_diag <- c(grad2_theta_phi, grad2_theta_sigma)
+            grad2_logW <- diag(grad2_logW_diag)
+            grad2_logW[upper.tri(grad2_logW)] <- grad_theta_phi_theta_sigma
+            grad2_logW[lower.tri(grad2_logW)] <- grad_theta_phi_theta_sigma
+          }
+          
+        } else {
+          theta_s <- samples[s]
+          theta_phi_s <- theta_s
+          phi_s <- tanh(theta_phi_s)
+          theta_sigma_s <- log(sigma_e^2) # so sigma_e^2 = exp(theta_sigma_s)
+          
+          if (transform == "arctanh") {
+            
+            # First derivative
+            grad_theta_phi <- (2*cos(freq[i])*(tanh(theta_phi_s)^2 - 1) -
+                                 2*tanh(theta_phi_s)*(tanh(theta_phi_s)^2 - 1)) /
+              (tanh(theta_phi_s)^2 - 2*cos(freq[i])*tanh(theta_phi_s) + 1) -
+              I[[i]]*exp(-theta_sigma_s)*(2*cos(freq[i])*(tanh(theta_phi_s)^2 - 1) -
+                                            2*tanh(theta_phi_s)*(tanh(theta_phi_s)^2 - 1))
+            
+            grad_logW <- grad_theta_phi
+            
+            # Second derivative
+            grad2_theta_phi <- 2 * I[[i]] * exp(-theta_sigma_s) * (tanh(theta_phi_s)^2 - 1) *
+              (2*cos(freq[i])*tanh(theta_phi_s) - 3*tanh(theta_phi_s)^2 + 1) -
+              (4*(cos(freq[i]) - tanh(theta_phi_s))^2 * (tanh(theta_phi_s)^2 - 1)^2) /
+              (tanh(theta_phi_s)^2 - 2*cos(freq[i]) * tanh(theta_phi_s) + 1)^2 -
+              (2*(tanh(theta_phi_s)^2 - 1) * (2*cos(freq[i])*tanh(theta_phi_s) -
+                                                3*tanh(theta_phi_s)^2 + 1)) /
+              (tanh(theta_phi_s)^2 - 2*cos(freq[i])*tanh(theta_phi_s) + 1)
+            
+            grad2_logW <- grad2_theta_phi
+            
+          } else { # use logit transform
             grad_logW <- ((2*exp(2*theta_s))/(exp(theta_s) + 1)^2 - (2*exp(3*theta_s)) / 
                             (exp(theta_s) + 1)^3 + (2*exp(2*theta_s)*cos(freq[i])) / 
                             (exp(theta_s) + 1)^2 - (2*exp(theta_s)*cos(freq[i])) / (exp(theta_s) + 1)) /
@@ -104,7 +167,7 @@ run_rvgaw_ar1 <- function(series, phi = NULL, sigma_e = NULL,
                  (exp(theta_s) + 1) + 1) - 
               (I[[i]]*((2*exp(2*theta_s))/(exp(theta_s) + 1)^2 - (2*exp(3*theta_s))/(exp(theta_s) + 1)^3 + 
                          (2*exp(2*theta_s)*cos(freq[i]))/(exp(theta_s) + 1)^2 - 
-                         (2*exp(theta_s)*cos(freq[i]))/(exp(theta_s) + 1))) / sigma_e^2
+                         (2*exp(theta_s)*cos(freq[i]))/(exp(theta_s) + 1))) / exp(theta_sigma_s)
             
             
             grad2_logW <- ((4*exp(2*theta_s))/(exp(theta_s) + 1)^2 - (10*exp(3*theta_s)) / 
@@ -121,33 +184,9 @@ run_rvgaw_ar1 <- function(series, phi = NULL, sigma_e = NULL,
                          (6*exp(4*theta_s))/(exp(theta_s) + 1)^4 + 
                          (6*exp(2*theta_s)*cos(freq[i]))/(exp(theta_s) + 1)^2 - 
                          (4*exp(3*theta_s)*cos(freq[i]))/(exp(theta_s) + 1)^3 - 
-                         (2*exp(theta_s)*cos(freq[i]))/(exp(theta_s) + 1)))/sigma_e^2
+                         (2*exp(theta_s)*cos(freq[i]))/(exp(theta_s) + 1)))/exp(theta_sigma_s)
             
           }
-          
-        } else {
-          # First derivative
-          d_logspec <-  (2 * cos(freq[i]) - 2 * phi_s) * (1 - phi_s^2) /
-            (1 + phi_s^2 - 2 * cos(freq[i]) * phi_s)
-          d_recispec <- 1/sigma_e^2 * (2 * phi_s - 2 * cos(freq[i])) *
-            (1 - phi_s^2)
-          grad_logW <- - (d_logspec + I[[i]] * d_recispec)
-          
-          # Second derivative
-          u <- (2 * cos(freq[i]) - 2*phi_s) * (1 - phi_s^2)
-          v <- 1 + phi_s^2 - 2 * phi_s * cos(freq[i])
-          u_prime <- -2 * (1 - phi_s^2)^2 + (2 * cos(freq[i]) - 2 * phi_s) *
-            (-2 * phi_s * (1 - phi_s^2))
-          v_prime <- 2 * phi_s * (1 - phi_s^2) - 2 * cos(freq[i]) * (1 - phi_s^2)
-          
-          d2_logspec <- (u_prime * v - u * v_prime) / v^2
-          
-          d2_recispec <- 1/sigma_e^2 * (2 * (1 - phi_s^2)^2 - 
-                                          2 * (2 * phi_s - 2 * cos(freq[i])) * 
-                                          (phi_s * (1 - phi_s^2))
-          )
-          
-          grad2_logW <- - (d2_logspec + I[[i]] * d2_recispec)
         }
         
         grads[[s]] <- grad_logW #grad_phi_fd
@@ -159,10 +198,18 @@ run_rvgaw_ar1 <- function(series, phi = NULL, sigma_e = NULL,
       E_hessian <- Reduce("+", hessian)/ length(hessian)
       
       prec_temp <- prec_temp - a * E_hessian
-      # mu_temp <- mu_temp + chol2inv(chol(prec_temp)) %*% (a * as.matrix(E_grad_logW))  
-      mu_temp <- mu_temp + 1/prec_temp * (a * E_grad)
+      if(sum(eigen(prec_temp)$values > 0) != param_dim) {
+        browser()
+      }
       
-      stopifnot(prec_temp > 0)
+      if (param_dim > 1) {
+        # mu_temp <- mu_temp + solve(prec_temp) %*% (a * as.matrix(E_grad))
+        mu_temp <- mu_temp + chol2inv(chol(prec_temp)) %*% (a * as.matrix(E_grad))
+        
+      } else {
+        mu_temp <- mu_temp + 1/prec_temp * (a * E_grad)
+      }
+      
       
     }  
     
@@ -178,16 +225,33 @@ run_rvgaw_ar1 <- function(series, phi = NULL, sigma_e = NULL,
   rvgaw.t2 <- proc.time()
   
   ## Posterior samples
-  rvgaw.post_var <- solve(rvgaw.prec[[length(freq)]])
+  rvgaw.post_var <- chol2inv(chol(rvgaw.prec[[length(freq)]]))
   
-  theta.post_samples <- rnorm(10000, rvgaw.mu_vals[[length(freq)]], sqrt(rvgaw.post_var)) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
-
-  if (transform == "arctanh") {
-    rvgaw.post_samples <- tanh(theta.post_samples)
+  rvgaw.post_samples <- NULL
+  if (param_dim > 1) {
+    theta.post_samples <- rmvnorm(n_post_samples, rvgaw.mu_vals[[length(freq)]],
+                                  rvgaw.post_var)
+    
+    if (transform == "arctanh") {
+      rvgaw.post_samples_phi <- tanh(theta.post_samples[, 1])
+    } else {
+      rvgaw.post_samples_phi <- exp(theta.post_samples[, 1]) / (1 + exp(theta.post_samples[, 1]))
+    }
+    
+    rvgaw.post_samples_sigma <- sqrt(exp(theta.post_samples[, 2]))
+    # plot(density(rvgaw.post_samples))
+    rvgaw.post_samples <- list(phi = rvgaw.post_samples_phi,
+                               sigma = rvgaw.post_samples_sigma)
+    
   } else {
-    rvgaw.post_samples <- exp(theta.post_samples) / (1 + exp(theta.post_samples))
+    theta.post_samples <- rnorm(n_post_samples, rvgaw.mu_vals[[length(freq)]], 
+                                sqrt(rvgaw.post_var)) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
+    if (transform == "arctanh") {
+      rvgaw.post_samples <- tanh(theta.post_samples)
+    } else {
+      rvgaw.post_samples <- exp(theta.post_samples) / (1 + exp(theta.post_samples))
+    }
   }
-  # plot(density(rvgaw.post_samples))
   
   ## Save results
   rvgaw_results <- list(mu = rvgaw.mu_vals,

@@ -1,5 +1,6 @@
 run_vb_ar1 <- function(series, mu_0, sigma_0, sigma_e = NULL, 
-                       VB_iters = 5000, use_whittle_likelihood, use_adam = T) {
+                       VB_iters = 5000, n_post_samples = 10000, 
+                       use_whittle_likelihood, use_adam = T) {
   vb.t1 <- proc.time()
   
   x <- series
@@ -45,6 +46,7 @@ run_vb_ar1 <- function(series, mu_0, sigma_0, sigma_e = NULL,
     fourier_transf <- fft(x)
     periodogram <- 1/n * Mod(fourier_transf)^2
     I <- periodogram[k_in_likelihood + 1]
+    # I <- 1/(2*pi) * periodogram[k_in_likelihood + 1]
   }
   
   for (k in 2:VB_iters) {
@@ -143,7 +145,7 @@ run_vb_ar1 <- function(series, mu_0, sigma_0, sigma_e = NULL,
   vb.t2 <- proc.time()
   
   post_var <- sigma_list[[VB_iters]]
-  batchvb.post_samples <- tanh(rnorm(10000, mu_list[[VB_iters]], post_var)) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
+  batchvb.post_samples <- tanh(rnorm(n_post_samples, mu_list[[VB_iters]], post_var)) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
   
   ## Save results
   vb_results <- list(mu = mu_list, sigma = sigma_list, 

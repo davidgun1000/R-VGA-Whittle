@@ -1,8 +1,8 @@
 ## Batch VB for AR(1) model
-
+setwd("~/R-VGA-Whittle/AR1/")
 rm(list = ls())
 
-source("calculate_likelihood.R")
+source("./source/calculate_likelihood.R")
 
 ## For storing results
 date <- "20230417"
@@ -105,7 +105,8 @@ if (rerun_vb) {
     ## Fourier transform of the series
     fourier_transf <- fft(x)
     periodogram <- 1/n * Mod(fourier_transf)^2
-    I <- periodogram[k_in_likelihood + 1]
+    # I <- periodogram[k_in_likelihood + 1]
+    I <- 1/(2*pi) * periodogram[k_in_likelihood + 1]
   }
   
   for (k in 2:VB_iters) {

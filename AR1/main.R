@@ -9,11 +9,11 @@ library(Matrix)
 library(coda)
 library(ggplot2)
 library(tidyr)
-source("calculate_likelihood.R")
-source("run_rvgaw_ar1.R")
-source("run_rvgae_ar1.R")
-source("run_mcmc_ar1.R")
-source("run_vb_ar1.R")
+source("./source/calculate_likelihood.R")
+source("./source/run_rvgaw_ar1.R")
+source("./source/run_rvgae_ar1.R")
+source("./source/run_mcmc_ar1.R")
+source("./source/run_vb_ar1.R")
 
 result_directory <- "./results/"
 
@@ -43,7 +43,7 @@ use_tempering <- T
 reorder_freq <- F
 reorder_seed <- 2024
 decreasing <- F
-transform <- "logit"
+transform <- "arctanh"
 
 ## MCMC flags
 n_post_samples <- 10000
@@ -51,9 +51,9 @@ burn_in <- 5000
 MCMC_iters <- n_post_samples + burn_in
 
 ## Model parameters 
-phi <- 0.99
+phi <- 0.9
 sigma_e <- 0.5
-n <- 20000 # time series length
+n <- 10000 # time series length
 
 if (use_tempering) {
   n_temper <- 0.1 * n #floor(n/2) #10
