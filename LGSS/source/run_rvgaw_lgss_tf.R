@@ -49,6 +49,8 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
     I <- reordered_I 
   }
   
+  LB <- c()
+  
   for (i in 1:length(freq)) {
     
     cat("i =", i, "\n")
@@ -62,6 +64,8 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
     
     mu_temp <- rvgaw.mu_vals[[i]]
     prec_temp <- rvgaw.prec[[i]] 
+    
+    log_likelihood <- c()
     
     for (v in 1:length(a_vals)) { # for each step in the tempering schedule
       
@@ -112,7 +116,7 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
         E_grad <- E_grad_deriv
         E_hessian <- E_hessian_deriv
         
-      } else if (deriv == "tf") {
+      } else {
         tf.t1 <- proc.time()
         
         theta_phi_tf <- tf$Variable(theta_phi)
@@ -128,11 +132,12 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
           tf_out <- compute_grad_logit(theta_phi_tf, theta_sigma_tf, I_i_tf, freq_i_tf)
         }
         
+        # log_likelihood <- log_likelihood + as.vector(tf_out$log_likelihood) ## maybe need to compute the log likelhood up to the ith freq rather than just at the ith freq? 
+        
         grads_tf <- tf_out$grad
         hessians_tf <- tf_out$hessian
         
         ## need to then reshape these into the right grads and hessians
-        ## gradients
         E_grad_tf <- rowMeans(as.matrix(grads_tf, 3L, 3L))
         
         ## batch-extract diagonals, and then extract first element of diagonal as grad2_phi(1),
@@ -169,140 +174,17 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
         E_grad <- E_grad_tf
         E_hessian <- E_hessian_tf
         
-      } else {
-        
-        t1 <- proc.time()
-        for (s in 1:S) {
-
-          theta_s <- theta_phi[s]
-          phi_s <- tanh(theta_phi[s])
-          sigma_eta <- sqrt(exp(theta_eta[s]))
-          sigma_eps <- sqrt(exp(theta_eps[s]))
-          
-          if (transform == "arctanh") {
-            # First derivative
-            # grad_logW_old <- - ((2 * cos(freq[i]) - 2 * tanh(theta_s)) * (1 - tanh(theta_s)^2) ) /
-            #   (1 + tanh(theta_s)^2 - 2 * tanh(theta_s) * cos(freq[i])) -
-            #   I[[i]] * (1/sigma_eta^2 * (2 * tanh(theta_s) - 2 * cos(freq[i])) * (1 - tanh(theta_s)^2))
-
-            grad_logW <- (sigma_eta^2*(2*cos(freq[i])*(tanh(theta_s)^2 - 1) -
-                                         2*tanh(theta_s)*(tanh(theta_s)^2 - 1))) /
-              ((sigma_eta^2/(tanh(theta_s)^2 - 2*cos(freq[i])*tanh(theta_s) + 1) +
-                  sigma_eps^2/(2*pi))*(- 2*cos(freq[i])*tanh(theta_s) + tanh(theta_s)^2 + 1)^2) -
-              (I[[i]]*sigma_eta^2*(2*cos(freq[i])*(tanh(theta_s)^2 - 1) -
-                                     2*tanh(theta_s)*(tanh(theta_s)^2 - 1))) /
-              ((sigma_eta^2/(- 2*cos(freq[i])*tanh(theta_s) + tanh(theta_s)^2 + 1) +
-                  sigma_eps^2/(2*pi))^2 * (- 2*cos(freq[i])*tanh(theta_s) + tanh(theta_s)^2 + 1)^2)
-
-            # Second derivative
-            # grad2_logW_old <- (2*(phi_s^2 - 1)^2 + 4*phi_s^2*(phi_s^2 - 1) -
-            #                  4*cos(freq[i])*phi_s*(phi_s^2 - 1))/(phi_s^2 - 2*cos(freq[i])*phi_s + 1) -
-            #   (2*cos(freq[i])*(phi_s^2 - 1) - 2*phi_s*(phi_s^2 - 1))^2/
-            #   (- 2*cos(freq[i])*phi_s + phi_s^2 + 1)^2 -
-            #   (I[[i]]*(2*(phi_s^2 - 1)^2 + 4*phi_s^2*(phi_s^2 - 1) -
-            #              4*cos(freq[i])*phi_s*(phi_s^2 - 1)))/sigma_eta^2
-
-            grad2_logW <- (sigma_eta^2*(2*(tanh(theta_s)^2 - 1)^2 +
-                                          4*tanh(theta_s)^2*(tanh(theta_s)^2 - 1) - 4*cos(freq[i])*tanh(theta_s)*(tanh(theta_s)^2 - 1))) /
-              ((sigma_eta^2/(tanh(theta_s)^2 - 2*cos(freq[i])*tanh(theta_s) + 1) +
-                  sigma_eps^2/(2*pi))*(- 2*cos(freq[i])*tanh(theta_s) + tanh(theta_s)^2 + 1)^2) -
-              (2*sigma_eta^2*(2*cos(freq[i])*(tanh(theta_s)^2 - 1) -
-                                2*tanh(theta_s)*(tanh(theta_s)^2 - 1))^2) /
-              ((sigma_eta^2/(tanh(theta_s)^2 - 2*cos(freq[i])*tanh(theta_s) + 1) +
-                  sigma_eps^2/(2*pi)) * (- 2*cos(freq[i])*tanh(theta_s) + tanh(theta_s)^2 + 1)^3) +
-              (sigma_eta^4*(2*cos(freq[i]) * (tanh(theta_s)^2 - 1) - 2*tanh(theta_s)*(tanh(theta_s)^2 - 1))^2) /
-              ((sigma_eta^2/(- 2*cos(freq[i])*tanh(theta_s) + tanh(theta_s)^2 + 1) +
-                  sigma_eps^2/(2*pi))^2 * (- 2*cos(freq[i])*tanh(theta_s) + tanh(theta_s)^2 + 1)^4) +
-              (2*I[[i]]*sigma_eta^2*(2*cos(freq[i])*(tanh(theta_s)^2 - 1) - 2*tanh(theta_s)*(tanh(theta_s)^2 - 1))^2) /
-              ((sigma_eta^2/(- 2*cos(freq[i])*tanh(theta_s) + tanh(theta_s)^2 + 1) +
-                  sigma_eps^2/(2*pi))^2 *
-                 (- 2*cos(freq[i])*tanh(theta_s) + tanh(theta_s)^2 + 1)^3) -
-              (2*I[[i]]*sigma_eta^4*(2*cos(freq[i])*(tanh(theta_s)^2 - 1) - 2*tanh(theta_s)*(tanh(theta_s)^2 - 1))^2) /
-              ((sigma_eta^2/(- 2*cos(freq[i])*tanh(theta_s) + tanh(theta_s)^2 + 1) + sigma_eps^2/(2*pi))^3 *
-                 (- 2*cos(freq[i])*tanh(theta_s) + tanh(theta_s)^2 + 1)^4) -
-              (I[[i]]*sigma_eta^2*(2*(tanh(theta_s)^2 - 1)^2 + 4*tanh(theta_s)^2*(tanh(theta_s)^2 - 1) -
-                                     4*cos(freq[i])*tanh(theta_s)*(tanh(theta_s)^2 - 1))) /
-              ((sigma_eta^2/(- 2*cos(freq[i])*tanh(theta_s) + tanh(theta_s)^2 + 1) +
-                  sigma_eps^2/(2*pi))^2*(- 2*cos(freq[i])*tanh(theta_s) + tanh(theta_s)^2 + 1)^2)
-            
-          } else { # use logit transform
-            grad_logW <- (sigma_eta^2*((2*exp(2*theta_s))/(exp(theta_s) + 1)^2 -
-                                         (2*exp(3*theta_s))/(exp(theta_s) + 1)^3 +
-                                         (2*exp(2*theta_s)*cos(freq[i]))/(exp(theta_s) + 1)^2 -
-                                         (2*exp(theta_s)*cos(freq[i]))/(exp(theta_s) + 1))) /
-              ((sigma_eta^2/(exp(2*theta_s)/(exp(theta_s) + 1)^2 -
-                               (2*exp(theta_s)*cos(freq[i]))/(exp(theta_s) + 1) + 1) +
-                  sigma_eps^2/(2*pi)) *
-                 (exp(2*theta_s)/(exp(theta_s) + 1)^2 - (2*exp(theta_s)*cos(freq[i]))/(exp(theta_s) + 1) + 1)^2) -
-              (I[[i]]*sigma_eta^2*((2*exp(2*theta_s))/(exp(theta_s) + 1)^2 -
-                                     (2*exp(3*theta_s))/(exp(theta_s) + 1)^3 +
-                                     (2*exp(2*theta_s)*cos(freq[i]))/(exp(theta_s) + 1)^2 -
-                                     (2*exp(theta_s)*cos(freq[i]))/(exp(theta_s) + 1))) /
-              ((sigma_eta^2/(exp(2*theta_s)/(exp(theta_s) + 1)^2 -
-                               (2*exp(theta_s)*cos(freq[i]))/(exp(theta_s) + 1) + 1) +
-                  sigma_eps^2/(2*pi))^2 *
-                 (exp(2*theta_s)/(exp(theta_s) + 1)^2 - (2*exp(theta_s)*cos(freq[i])) /
-                    (exp(theta_s) + 1) + 1)^2)
-
-            grad2_logW <- (8*I[[i]]*sigma_eta^2*exp(2*theta_s) *
-                             (cos(freq[i]) - exp(theta_s) + exp(theta_s)*cos(freq[i]))^2) /
-              ((sigma_eps^2/(2*pi) +
-                  (sigma_eta^2*(exp(theta_s) + 1)^2) /
-                  (2*exp(2*theta_s) + 2*exp(theta_s) - 2*exp(theta_s)*cos(freq[i]) -
-                     2*exp(2*theta_s)*cos(freq[i]) + 1))^2 *
-                 (2*exp(2*theta_s) + 2*exp(theta_s) - 2*exp(theta_s)*cos(freq[i]) -
-                    2*exp(2*theta_s)*cos(freq[i]) + 1)^3) -
-              (8*sigma_eta^2*exp(2*theta_s) *
-                 (cos(freq[i]) - exp(theta_s) + exp(theta_s)*cos(freq[i]))^2) /
-              ((sigma_eps^2/(2*pi) + (sigma_eta^2*(exp(theta_s) + 1)^2) /
-                  (2*exp(2*theta_s) + 2*exp(theta_s) - 2*exp(theta_s)*cos(freq[i]) -
-                     2*exp(2*theta_s)*cos(freq[i]) + 1)) *
-                 (2*exp(2*theta_s) + 2*exp(theta_s) - 2*exp(theta_s)*cos(freq[i]) -
-                    2*exp(2*theta_s)*cos(freq[i]) + 1)^3) -
-              (2*sigma_eta^2*exp(theta_s)*(exp(2*theta_s) + cos(freq[i]) -
-                                             2*exp(theta_s) - exp(2*theta_s)*cos(freq[i]))) /
-              ((sigma_eps^2/(2*pi) + (sigma_eta^2*(exp(theta_s) + 1)^2) /
-                  (2*exp(2*theta_s) + 2*exp(theta_s) - 2*exp(theta_s)*cos(freq[i]) -
-                     2*exp(2*theta_s)*cos(freq[i]) + 1)) *
-                 (2*exp(2*theta_s) + 2*exp(theta_s) - 2*exp(theta_s)*cos(freq[i]) -
-                    2*exp(2*theta_s)*cos(freq[i]) + 1)^2) +
-              (4*sigma_eta^4*exp(2*theta_s)*(exp(theta_s) + 1)^2 *
-                 (cos(freq[i]) - exp(theta_s) + exp(theta_s)*cos(freq[i]))^2) /
-              ((sigma_eps^2/(2*pi) + (sigma_eta^2*(exp(theta_s) + 1)^2) /
-                  (2*exp(2*theta_s) + 2*exp(theta_s) - 2*exp(theta_s)*cos(freq[i]) -
-                     2*exp(2*theta_s)*cos(freq[i]) + 1))^2 *
-                 (2*exp(2*theta_s) + 2*exp(theta_s) - 2*exp(theta_s)*cos(freq[i]) -
-                    2*exp(2*theta_s)*cos(freq[i]) + 1)^4) +
-              (2*I[[i]]*sigma_eta^2*exp(theta_s) *
-                 (exp(2*theta_s) + cos(freq[i]) - 2*exp(theta_s) - exp(2*theta_s)*cos(freq[i]))) /
-              ((sigma_eps^2/(2*pi) + (sigma_eta^2*(exp(theta_s) + 1)^2) /
-                  (2*exp(2*theta_s) + 2*exp(theta_s) - 2*exp(theta_s)*cos(freq[i]) -
-                     2*exp(2*theta_s)*cos(freq[i]) + 1))^2 *
-                 (2*exp(2*theta_s) + 2*exp(theta_s) - 2*exp(theta_s)*cos(freq[i]) -
-                    2*exp(2*theta_s)*cos(freq[i]) + 1)^2) -
-              (8*I[[i]]*sigma_eta^4*exp(2*theta_s)*(exp(theta_s) + 1)^2 *
-                 (cos(freq[i]) - exp(theta_s) + exp(theta_s)*cos(freq[i]))^2) /
-              ((sigma_eps^2/(2*pi) + (sigma_eta^2*(exp(theta_s) + 1)^2) /
-                  (2*exp(2*theta_s) + 2*exp(theta_s) - 2*exp(theta_s)*cos(freq[i]) -
-                     2*exp(2*theta_s)*cos(freq[i]) + 1))^3 *
-                 (2*exp(2*theta_s) + 2*exp(theta_s) - 2*exp(theta_s)*cos(freq[i]) -
-                    2*exp(2*theta_s)*cos(freq[i]) + 1)^4)
-
-          }
-
-          grads[[s]] <- grad_logW #grad_phi_fd
-          hessian[[s]] <- grad2_logW #grad_phi_2_fd #x
-
-        }
-
-        t2 <- proc.time()
-        
-        E_grad <- Reduce("+", grads)/ length(grads)
-        E_hessian <- Reduce("+", hessian)/ length(hessian)
-        
+        ## Compute log likelihood for the lower bound
+        # for (s in 1:S) {
+        #   params <- list(phi = tanh(theta_phi[s]), 
+        #                  sigma_eta = sqrt(exp(theta_eta[s])),
+        #                  sigma_eps = sqrt(exp(theta_eps[s]))
+        #                 )
+        #   log_likelihood[s] <- compute_whittle_likelihood_lb(y = y, params = params, i = i)
+        # }
       }
-
-      # browser()
+      
+      ## Update variational mean and precision
       
       prec_temp <- prec_temp - a * E_hessian
       
@@ -311,10 +193,23 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
       }
       
       mu_temp <- mu_temp + chol2inv(chol(prec_temp)) %*% (a * as.matrix(E_grad))
-      # mu_temp <- mu_temp + 1/prec_temp * (a * E_grad)
-      
       
     }  
+    
+    ## Compute lower bound to check for convergence
+    
+    # log_likelihood <- as.vector(tf_out$log_likelihood)
+    log_likelihood <- compute_whittle_likelihood_lb(y = y, 
+                                                    params = list(phi = tanh(theta_phi[1]),
+                                                                  sigma_eta = sqrt(exp(theta_eta[1])),
+                                                                  sigma_eps = sqrt(exp(theta_eps[1]))), 
+                                                    I = I, 
+                                                    freq = freq)
+    log_prior <- dmvnorm(samples, prior_mean, prior_var, log = T)
+    log_q <- dmvnorm(samples, rvgaw.mu_vals[[i]], chol2inv(chol(rvgaw.prec[[i]])), log = T)
+    LB[i] <- mean(log_likelihood + log_prior - log_q)
+    cat("llh =", mean(log_likelihood), ", log prior =", mean(log_prior), 
+        ", log_q = ", mean(log_q), "\n")
     
     rvgaw.prec[[i+1]] <- prec_temp
     rvgaw.mu_vals[[i+1]] <- mu_temp
@@ -355,6 +250,7 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
                         S = S,
                         use_tempering = use_tempering,
                         temper_schedule = a_vals,
+                        lower_bound = LB,
                         time_elapsed = rvgaw.t2 - rvgaw.t1)
   
   return(rvgaw_results)
@@ -375,6 +271,7 @@ log_likelihood_arctanh <- function(theta_phi, theta_eta, theta_eps,
 
 compute_grad_arctanh <- tf_function(
   testf <- function(theta_phi_s, theta_eta_s, theta_eps_s, I_i, freq_i) {
+    log_likelihood_tf <- 0
     with (tf$GradientTape() %as% tape2, {
       with (tf$GradientTape(persistent = TRUE) %as% tape1, {
         
@@ -403,7 +300,8 @@ compute_grad_arctanh <- tf_function(
     })
     grad2_tf %<-% tape2$jacobian(grad_tf, c(theta_phi_s, theta_eta_s, theta_eps_s))
     
-    return(list(grad = grad_tf,
+    return(list(log_likelihood = log_likelihood_tf,
+                grad = grad_tf,
                 hessian = grad2_tf))
   }
 )

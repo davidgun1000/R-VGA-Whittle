@@ -11,29 +11,54 @@ library(keras)
 source("./source/compute_whittle_likelihood_sv.R")
 source("./source/run_rvgaw_sv_tf.R")
 source("./source/run_mcmc_sv.R")
+source("./source/particleFilter.R")
 
 result_directory <- "./results/"
+
+# List physical devices
+gpus <- tf$config$experimental$list_physical_devices('GPU')
+
+if (length(gpus) > 0) {
+  tryCatch({
+    # Restrict TensorFlow to only allocate 4GB of memory on the first GPU
+    tf$config$experimental$set_virtual_device_configuration(
+      gpus[[1]],
+      list(tf$config$experimental$VirtualDeviceConfiguration(memory_limit=4096))
+    )
+    
+    logical_gpus <- tf$config$experimental$list_logical_devices('GPU')
+    
+    print(paste0(length(gpus), " Physical GPUs,", length(logical_gpus), " Logical GPUs"))
+  }, error = function(e) {
+    # Virtual devices must be set before GPUs have been initialized
+    print(e)
+  })
+}
 
 date <- "20230626"
 
 ## R-VGA flags
-regenerate_data <- T
+regenerate_data <- F
 save_data <- F
 use_tempering <- T
-reorder_freq <- F
-decreasing <- F
+reorder_freq <- T
+decreasing <- T
 reorder_seed <- 2024
 
 ## Flags
-rerun_rvgaw <- T
+rerun_rvgaw <- F
 rerun_mcmcw <- F
+rerun_mcmce <- F
+
 save_rvgaw_results <- F
 save_mcmcw_results <- F
+save_mcmce_results <- F
 
 ## Generate data
 mu <- 0
-sigma_eta <- 0.5
 phi <- 0.9
+sigma_eta <- 0.7
+sigma_eps <- 0.5
 x1 <- rnorm(1, mu, sigma_eta^2 / (1 - phi^2))
 n <- 1000
 x <- c()
@@ -47,7 +72,7 @@ if (regenerate_data) {
   for (t in 2:n) {
     x[t] <- mu + phi * (x[t-1] - mu) + sigma_eta * rnorm(1, 0, 1)
   }
-  sigma_eps <- 1
+  
   eps <- rnorm(n, 0, sigma_eps)
   y <- exp(x/2) * eps
   
@@ -146,13 +171,12 @@ rvgaw.post_samples_phi <- rvgaw_results$post_samples$phi
 rvgaw.post_samples_eta <- rvgaw_results$post_samples$sigma_eta
 rvgaw.post_samples_xi <- rvgaw_results$post_samples$sigma_xi
 
-
 ########################################
 ##                MCMC                ## 
 ########################################
 
 mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_results_n", n, 
-                         "_phi", phi_string, temper_info, reorder_info, "_", date, ".rds")
+                         "_phi", phi_string, "_", date, ".rds")
 
 adapt_proposal <- T
 
@@ -190,16 +214,48 @@ traceplot(mcmcw.post_samples_phi, main = "Trace plot for phi")
 traceplot(mcmcw.post_samples_eta, main = "Trace plot for sigma_eta")
 traceplot(mcmcw.post_samples_xi, main = "Trace plot for sigma_xi")
 
+####### MCMCE ##########
+mcmce_filepath <- paste0(result_directory, "mcmc_exact_results_n", n, 
+                         "_phi", phi_string, "_", date, ".rds")
+
+if (rerun_mcmce) {
+  mcmce_results <- run_mcmc_sv(y, #sigma_eta, sigma_eps, 
+                               iters = MCMC_iters, burn_in = burn_in,
+                               prior_mean = prior_mean, prior_var = prior_var,  
+                               state_ini_mean = state_ini_mean, state_ini_var = state_ini_var,
+                               adapt_proposal = T, use_whittle_likelihood = F)
+  
+  if (save_mcmce_results) {
+    saveRDS(mcmce_results, mcmce_filepath)
+  }
+} else {
+  mcmce_results <- readRDS(mcmce_filepath)
+}
+
+mcmce.post_samples_phi <- as.mcmc(mcmce_results$post_samples$phi[-(1:burn_in)])
+mcmce.post_samples_eta <- as.mcmc(mcmce_results$post_samples$sigma_eta[-(1:burn_in)])
+mcmce.post_samples_xi <- as.mcmc(mcmce_results$post_samples$sigma_xi[-(1:burn_in)])
+
+par(mfrow = c(3,1))
+traceplot(mcmce.post_samples_phi, main = "Trace plot for phi")
+traceplot(mcmce.post_samples_eta, main = "Trace plot for sigma_eta")
+traceplot(mcmce.post_samples_xi, main = "Trace plot for sigma_xi")
+
+###########################
+
 par(mfrow = c(1,3))
 plot(density(mcmcw.post_samples_phi), main = "Posterior of phi", 
      col = "blue", lty = 2, lwd = 1.5)
+lines(density(mcmce.post_samples_phi), col = "blue", lwd = 1.5)
 lines(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 1.5)
+
 abline(v = phi, lty = 3)
 legend("topright", legend = c("MCMC Whittle", "R-VGA Whittle"),
        col = c("blue", "red"), lty = c(2, 2))
 
 plot(density(mcmcw.post_samples_eta), main = "Posterior of sigma_eta", 
      col = "blue", lty = 2, lwd = 1.5)
+lines(density(mcmce.post_samples_eta), col = "blue", lwd = 1.5)
 lines(density(rvgaw.post_samples_eta), col = "red", lty = 2, lwd = 1.5)
 abline(v = sigma_eta, lty = 3)
 legend("topright", legend = c("MCMC Whittle", "R-VGA Whittle"),
@@ -207,6 +263,7 @@ legend("topright", legend = c("MCMC Whittle", "R-VGA Whittle"),
 
 plot(density(mcmcw.post_samples_xi), 
      main = "Posterior of sigma_xi", col = "blue", lty = 2, lwd = 1.5)
+lines(density(mcmce.post_samples_xi), col = "blue", lwd = 1.5)
 lines(density(rvgaw.post_samples_xi), col = "red", lty = 2, lwd = 1.5)
 
 abline(v = sqrt(pi^2/2), lty = 3)
@@ -215,16 +272,16 @@ legend("topright", legend = c("MCMC Whittle", "R-VGA Whittle"),
 
 
 ## Trajectories
-mu_phi <- sapply(rvgaw_results$mu, function(x) x[1])
-mu_eta <- sapply(rvgaw_results$mu, function(x) x[2])
-mu_xi <- sapply(rvgaw_results$mu, function(x) x[3])
-
-par(mfrow = c(1, 3))
-plot(tanh(mu_phi), type = "l", main = "Trajectory of phi")
-abline(h = phi, lty = 2)
-
-plot(sqrt(exp(mu_eta)), type = "l", main = "Trajectory of sigma_eta")
-abline(h = sigma_eta, lty = 2)
-
-plot(sqrt(exp(mu_xi)), type = "l", main = "Trajectory of sigma_xi")
-abline(h = sqrt(pi^2/2), lty = 2)
+# mu_phi <- sapply(rvgaw_results$mu, function(x) x[1])
+# mu_eta <- sapply(rvgaw_results$mu, function(x) x[2])
+# mu_xi <- sapply(rvgaw_results$mu, function(x) x[3])
+# 
+# par(mfrow = c(1, 3))
+# plot(tanh(mu_phi), type = "l", main = "Trajectory of phi")
+# abline(h = phi, lty = 2)
+# 
+# plot(sqrt(exp(mu_eta)), type = "l", main = "Trajectory of sigma_eta")
+# abline(h = sigma_eta, lty = 2)
+# 
+# plot(sqrt(exp(mu_xi)), type = "l", main = "Trajectory of sigma_xi")
+# abline(h = sqrt(pi^2/2), lty = 2)

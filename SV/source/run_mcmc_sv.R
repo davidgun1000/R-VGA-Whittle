@@ -1,7 +1,7 @@
 run_mcmc_sv <- function(y, #sigma_eta, sigma_xi, 
                         iters = 10000, burn_in = 1000,
                        prior_mean = rep(0, 3), prior_var = diag(rep(1, 3)), 
-                       state_ini_mean = 0, state_ini_var = 1,
+                       state_ini_mean = 0, state_ini_var = 1, nParticles = 500, 
                        adapt_proposal = T, use_whittle_likelihood = F) {
   
   mcmc.t1 <- proc.time()
@@ -15,7 +15,16 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
   
   phi_curr <- tanh(theta_curr[1])
   sigma_eta_curr <- sqrt(exp(theta_curr[2]))
-  sigma_xi_curr <- sqrt(exp(theta_curr[3]))
+  
+  sigma_xi_curr <- 0
+  if (use_whittle_likelihood) {
+    sigma_xi_curr <- sqrt(exp(theta_curr[3]))
+  } else {
+    sigma_eps_curr <- sqrt(exp(theta_curr[3]))
+    # Estimate sigma_xi from sigma_eps
+    sim_eps <- rnorm(10000, 0, sigma_eps_curr)
+    sigma_xi_curr <- sqrt(var(log(sim_eps^2)))
+  }
   
   ## Proposal variancel
   D <- diag(c(1, 1, 0.01))
@@ -25,23 +34,44 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
   }
   
   ## Calculate initial log likelihood and log prior
-  params_curr <- list(phi = phi_curr, sigma_eta = sigma_eta_curr, sigma_xi = sigma_xi_curr)
   
-  log_likelihood_curr <- compute_whittle_likelihood_sv(y = y, params = params_curr)
+  if (use_whittle_likelihood) {
+    params_curr <- list(phi = phi_curr, sigma_eta = sigma_eta_curr, sigma_xi = sigma_xi_curr)
+    log_likelihood_curr <- compute_whittle_likelihood_sv(y = y, params = params_curr)
+  } else {
+    # paramsKF_curr <- list(phi = phi_curr, sigma_eta = sigma_eta_curr, sigma_eps = sigma_xi_curr)
+    # 
+    # kf_curr <- kalmanFilter(params = paramsKF_curr, state_prior_mean = 0, state_prior_var = 1,
+    #                        observations = log(y^2), iters = length(y))
+    # log_likelihood_curr <- kf_curr$log_likelihood
+    
+    params_curr <- list(phi = phi_curr, sigma_eta = sigma_eta_curr, sigma_eps = sigma_eps_curr,
+                        sigma_xi = sigma_xi_curr)
+    pf_out <- particleFilter(y = y, N = nParticles, iniState = 0, param = params_curr)
+    log_likelihood_curr <- pf_out$log_likelihood
+  }
   
   log_prior_curr <- dmvnorm(theta_curr, prior_mean, prior_var, log = T)
   
   for (i in 1:iters) {
     
-    # cat("i =", i, "\n")
+    cat("i =", i, "\n")
     
     ## 1. Propose new parameter values
     theta_prop <- rmvnorm(1, theta_curr, D)
     phi_prop <- tanh(theta_prop[1])
     sigma_eta_prop <- sqrt(exp(theta_prop[2]))
-    sigma_xi_prop <- sqrt(exp(theta_prop[3]))
-    params_prop <- list(phi = phi_prop, sigma_eta = sigma_eta_prop, 
-                        sigma_xi = sigma_xi_prop)
+    
+    if (use_whittle_likelihood) {
+      sigma_xi_prop <- sqrt(exp(theta_prop[3]))
+    } else {
+      sigma_eps_prop <- sqrt(exp(theta_prop[3]))
+      
+      # Estimate sigma_xi from sigma_eps
+      sim_eps <- rnorm(10000, 0, sigma_eps_prop)
+      sigma_xi_prop <- sqrt(var(log(sim_eps^2)))
+    }
+    
     
     if (i %% (iters/10) == 0) {
       cat(i/iters * 100, "% complete \n")
@@ -50,7 +80,22 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
     }
     
     ## 2. Calculate likelihood
-    log_likelihood_prop <- compute_whittle_likelihood_sv(y = y, params = params_prop)    
+    if (use_whittle_likelihood) {
+      params_prop <- list(phi = phi_prop, sigma_eta = sigma_eta_prop, 
+                          sigma_xi = sigma_xi_prop)
+      log_likelihood_prop <- compute_whittle_likelihood_sv(y = y, params = params_prop)    
+    } else {
+      # paramsKF_prop <- list(phi = phi_prop, sigma_eta = sigma_eta_prop, sigma_eps = sigma_xi_prop)
+      # 
+      # kf_prop <- kalmanFilter(params = paramsKF_prop, state_prior_mean = 0, state_prior_var = 1,
+      #                         observations = log(y^2), iters = length(y))
+      # log_likelihood_prop <- kf_prop$log_likelihood
+      
+      params_prop <- list(phi = phi_prop, sigma_eta = sigma_eta_prop, sigma_eps = sigma_eps_prop,
+                          sigma_xi = sigma_xi_prop)
+      pf_out <- particleFilter(y = y, N = nParticles, iniState = 0, param = params_prop)
+      log_likelihood_prop <- pf_out$log_likelihood
+    }
     
     ## 3. Calculate prior
     log_prior_prop <- dmvnorm(theta_prop, prior_mean, prior_var, log = T)
@@ -74,7 +119,17 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
     # cat("Acc =", accept[i], "\n")
     
     ## Store parameter 
-    post_samples_theta[i, ] <- unlist(params_curr)
+    if (use_whittle_likelihood) {
+      post_samples_theta[i, ] <- unlist(params_curr)
+    } else {
+      
+      # test <- c(params_curr$phi, params_curr$sigma_eta, params_curr$sigma_xi)
+      # 
+      # if(length(test) != 3) {
+      #   browser()
+      # }
+      post_samples_theta[i, ] <- c(params_curr$phi, params_curr$sigma_eta, params_curr$sigma_xi)
+    }
     
     ## Adapt proposal covariance matrix
     if (adapt_proposal) {

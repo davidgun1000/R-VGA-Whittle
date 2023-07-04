@@ -12,6 +12,7 @@ source("./source/run_rvgaw_lgss_tf.R")
 source("./source/run_mcmc_lgss_allparams.R")
 source("./source/compute_kf_likelihood.R")
 source("./source/compute_whittle_likelihood_lgss.R")
+source("./source/compute_whittle_likelihood_lb.R")
 source("./source/update_sigma.R")
 
 # List physical devices
@@ -39,12 +40,12 @@ result_directory <- "./results/"
 
 ## Flags
 date <- "20230525"
-regenerate_data <- T
+regenerate_data <- F
 save_data <- F
 
 rerun_rvgaw <- T
-rerun_mcmce <- T
-rerun_mcmcw <- T
+rerun_mcmce <- F
+rerun_mcmcw <- F
 save_rvgaw_results <- F
 save_mcmce_results <- F
 save_mcmcw_results <- F
@@ -158,6 +159,7 @@ state_ini_var <- 1
 # }
 # 
 # hist(phi_samples, main = "Samples from the prior of phi")
+
 ################################################################################
 ##                      R-VGA with Whittle likelihood                         ##
 ################################################################################
@@ -323,3 +325,8 @@ abline(h = sigma_eta, lty = 2)
 plot(mu_sigma_eps[plot_range], type = "l",
      ylab = "sigma_eps", xlab = "Iterations", main = "Trajectory of sigma_eps")
 abline(h = sigma_eps, lty = 2)
+
+## Lower bound  
+par(mfrow = c(1,1))
+LB <- rvgaw_results$lower_bound
+plot(LB, type = "l")

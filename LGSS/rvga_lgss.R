@@ -10,7 +10,7 @@ library(Deriv)
 
 source("./source/run_rvgaw_lgss_tf.R")
 # source("./source/compute_kf_likelihood.R")
-# source("./source/compute_whittle_likelihood_lgss.R")
+source("./source/compute_whittle_likelihood_lb.R")
 # source("./source/update_sigma.R")
 
 
@@ -53,7 +53,7 @@ phi <- 0.9
 phi_string <- sub("(\\d+)\\.(\\d+)", "\\1\\2", toString(phi)) ## removes decimal point fron the number
 
 # Generate true process x_1:T
-n <- 5000
+n <- 1000
 # times <- seq(0, 1, length.out = iters)
 
 if (regenerate_data) {
@@ -100,7 +100,7 @@ prior_var <- diag(1, 3)
 
 rvgaw_results <- run_rvgaw_lgss(y = y, #sigma_eta = sigma_eta, sigma_eps = sigma_eps, 
                                 prior_mean = prior_mean, prior_var = prior_var, 
-                                deriv = "deriv", 
+                                deriv = "tf", 
                                 S = 200, use_tempering = use_tempering, 
                                 reorder_freq = reorder_freq,
                                 decreasing = decreasing, 
@@ -126,3 +126,6 @@ abline(v = sigma_eta, lty = 2)
 
 plot(density(rvgaw.post_samples_eps), main = "Posterior of sigma_eps")
 abline(v = sigma_eps, lty = 2)
+
+## LB
+plot(rvgaw_results$lower_bound, type = "l")
