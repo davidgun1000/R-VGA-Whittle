@@ -1,6 +1,6 @@
 run_mcmc_sv <- function(y, #sigma_eta, sigma_xi, 
                         iters = 10000, burn_in = 1000,
-                       prior_mean = rep(0, 3), prior_var = diag(rep(1, 3)), 
+                       prior_mean = 0, prior_var = 1, 
                        state_ini_mean = 0, state_ini_var = 1, nParticles = 500, 
                        adapt_proposal = T, use_whittle_likelihood = F) {
   
@@ -8,26 +8,29 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
   
   accept <- rep(0, iters)
   acceptProb <- c()
-  post_samples_theta <- matrix(NA, iters, 3)
+  
+  param_dim <- length(prior_mean)
+  
+  post_samples_theta <- matrix(NA, iters, param_dim)
   
   ## Initial values: sample params from prior
   theta_curr <- rmvnorm(1, prior_mean, prior_var)
   
   phi_curr <- tanh(theta_curr[1])
   sigma_eta_curr <- sqrt(exp(theta_curr[2]))
-  
-  sigma_xi_curr <- 0
-  if (use_whittle_likelihood) {
-    sigma_xi_curr <- sqrt(exp(theta_curr[3]))
-  } else {
-    sigma_eps_curr <- sqrt(exp(theta_curr[3]))
-    # Estimate sigma_xi from sigma_eps
-    sim_eps <- rnorm(10000, 0, sigma_eps_curr)
-    sigma_xi_curr <- sqrt(var(log(sim_eps^2)))
-  }
+  sigma_xi <- sqrt(pi^2/2)
+  sigma_eps <- 1
+  # if (use_whittle_likelihood) {
+  #   sigma_xi_curr <- sqrt(exp(theta_curr[3]))
+  # } else {
+  #   sigma_eps_curr <- sqrt(exp(theta_curr[3]))
+  #   # Estimate sigma_xi from sigma_eps
+  #   sim_eps <- rnorm(10000, 0, sigma_eps_curr)
+  #   sigma_xi_curr <- sqrt(var(log(sim_eps^2)))
+  # }
   
   ## Proposal variancel
-  D <- diag(c(1, 1, 0.01))
+  D <- diag(c(1, 1))
   if (adapt_proposal) {
     scale <- 1
     target_accept <- 0.23
@@ -36,7 +39,7 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
   ## Calculate initial log likelihood and log prior
   
   if (use_whittle_likelihood) {
-    params_curr <- list(phi = phi_curr, sigma_eta = sigma_eta_curr, sigma_xi = sigma_xi_curr)
+    params_curr <- list(phi = phi_curr, sigma_eta = sigma_eta_curr, sigma_xi = sigma_xi)
     log_likelihood_curr <- compute_whittle_likelihood_sv(y = y, params = params_curr)
   } else {
     # paramsKF_curr <- list(phi = phi_curr, sigma_eta = sigma_eta_curr, sigma_eps = sigma_xi_curr)
@@ -45,8 +48,8 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
     #                        observations = log(y^2), iters = length(y))
     # log_likelihood_curr <- kf_curr$log_likelihood
     
-    params_curr <- list(phi = phi_curr, sigma_eta = sigma_eta_curr, sigma_eps = sigma_eps_curr,
-                        sigma_xi = sigma_xi_curr)
+    params_curr <- list(phi = phi_curr, sigma_eta = sigma_eta_curr, sigma_eps = sigma_eps,
+                        sigma_xi = sigma_xi)
     pf_out <- particleFilter(y = y, N = nParticles, iniState = 0, param = params_curr)
     log_likelihood_curr <- pf_out$log_likelihood
   }
@@ -62,15 +65,17 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
     phi_prop <- tanh(theta_prop[1])
     sigma_eta_prop <- sqrt(exp(theta_prop[2]))
     
-    if (use_whittle_likelihood) {
-      sigma_xi_prop <- sqrt(exp(theta_prop[3]))
-    } else {
-      sigma_eps_prop <- sqrt(exp(theta_prop[3]))
-      
-      # Estimate sigma_xi from sigma_eps
-      sim_eps <- rnorm(10000, 0, sigma_eps_prop)
-      sigma_xi_prop <- sqrt(var(log(sim_eps^2)))
-    }
+    # sigma_xi_prop <- sqrt(pi^2/2)
+    
+    # if (use_whittle_likelihood) {
+    #   sigma_xi_prop <- sqrt(exp(theta_prop[3]))
+    # } else {
+    #   sigma_eps_prop <- sqrt(exp(theta_prop[3]))
+    #   
+    #   # Estimate sigma_xi from sigma_eps
+    #   sim_eps <- rnorm(10000, 0, sigma_eps_prop)
+    #   sigma_xi_prop <- sqrt(var(log(sim_eps^2)))
+    # }
     
     
     if (i %% (iters/10) == 0) {
@@ -82,7 +87,7 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
     ## 2. Calculate likelihood
     if (use_whittle_likelihood) {
       params_prop <- list(phi = phi_prop, sigma_eta = sigma_eta_prop, 
-                          sigma_xi = sigma_xi_prop)
+                          sigma_xi = sigma_xi)
       log_likelihood_prop <- compute_whittle_likelihood_sv(y = y, params = params_prop)    
     } else {
       # paramsKF_prop <- list(phi = phi_prop, sigma_eta = sigma_eta_prop, sigma_eps = sigma_xi_prop)
@@ -91,8 +96,8 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
       #                         observations = log(y^2), iters = length(y))
       # log_likelihood_prop <- kf_prop$log_likelihood
       
-      params_prop <- list(phi = phi_prop, sigma_eta = sigma_eta_prop, sigma_eps = sigma_eps_prop,
-                          sigma_xi = sigma_xi_prop)
+      params_prop <- list(phi = phi_prop, sigma_eta = sigma_eta_prop, sigma_eps = sigma_eps,
+                          sigma_xi = sigma_xi)
       pf_out <- particleFilter(y = y, N = nParticles, iniState = 0, param = params_prop)
       log_likelihood_prop <- pf_out$log_likelihood
     }
@@ -119,22 +124,16 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
     # cat("Acc =", accept[i], "\n")
     
     ## Store parameter 
-    if (use_whittle_likelihood) {
-      post_samples_theta[i, ] <- unlist(params_curr)
-    } else {
-      
-      # test <- c(params_curr$phi, params_curr$sigma_eta, params_curr$sigma_xi)
-      # 
-      # if(length(test) != 3) {
-      #   browser()
-      # }
-      post_samples_theta[i, ] <- c(params_curr$phi, params_curr$sigma_eta, params_curr$sigma_xi)
-    }
+    # if (use_whittle_likelihood) {
+      post_samples_theta[i, ] <- c(params_curr$phi, params_curr$sigma_eta)
+    # } else {
+    #   post_samples_theta[i, ] <- c(params_curr$phi, params_curr$sigma_eta, params_curr$sigma_xi)
+    # }
     
     ## Adapt proposal covariance matrix
     if (adapt_proposal) {
       if ((i >= 200) && (i %% 10 == 0)) {
-        scale <- update_sigma(scale, a, target_accept, i, 3)
+        scale <- update_sigma(scale, a, target_accept, i, param_dim)
         D <- scale * var((post_samples_theta[1:i, ]))
       }
     }
@@ -142,13 +141,13 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
   
   mcmc.t2 <- proc.time()
   
-  ## Back-transform
+  ## Extract samples
   post_samples_phi <- post_samples_theta[, 1]
   post_samples_eta <- post_samples_theta[, 2]
-  post_samples_xi <- post_samples_theta[, 3]
+  # post_samples_xi <- post_samples_theta[, 3]
   mcmc.post_samples <- list(phi = post_samples_phi,
-                            sigma_eta = post_samples_eta,
-                            sigma_xi = post_samples_xi)
+                            sigma_eta = post_samples_eta) #,
+                            # sigma_xi = post_samples_xi)
   
   return(list(post_samples = mcmc.post_samples,
               iters = iters,

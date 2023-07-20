@@ -39,7 +39,8 @@ date <- "20230626"
 
 ## R-VGA flags
 rerun_rvgaw <- T
-save_rvgaw_results <- F
+save_vartest_results <- F
+
 regenerate_data <- T
 save_data <- F
 use_tempering <- T
@@ -126,7 +127,7 @@ if (regenerate_data) {
 ##                R-VGA               ##
 ########################################
 
-S <- 500
+S <- 100
 
 if (use_tempering) {
   n_temper <- 10
@@ -143,7 +144,7 @@ if (reorder_freq) {
   reorder_info <- ""
 }
 
-rvgaw_filepath <- paste0(result_directory, "rvga_whittle_results_n", n, 
+rvgaw_filepath <- paste0(result_directory, "rvga_vartest_results_n", n, 
                          "_phi", phi_string, temper_info, reorder_info, "_", date, ".rds")
 
 ## Prior
@@ -159,52 +160,60 @@ hist(prior_phi)
 hist(prior_eta)
 # hist(prior_xi)
 
-if (rerun_rvgaw) {
-  rvgaw_results <- run_rvgaw_sv(y = y, #sigma_eta = sigma_eta, sigma_eps = sigma_eps, 
-                                prior_mean = prior_mean, prior_var = prior_var, 
-                                deriv = "tf", 
-                                S = S, use_tempering = use_tempering, 
-                                reorder_freq = reorder_freq,
-                                decreasing = decreasing, 
-                                n_temper = n_temper,
-                                temper_schedule = temper_schedule)
+n_runs <- 10
+results <- list()
+for (r in 1:n_runs) {
+  results[[r]] <- run_rvgaw_sv(y = y, #sigma_eta = sigma_eta, sigma_eps = sigma_eps, 
+                              prior_mean = prior_mean, prior_var = prior_var, 
+                              deriv = "tf", 
+                              S = S, use_tempering = use_tempering, 
+                              reorder_freq = reorder_freq,
+                              decreasing = decreasing, 
+                              n_temper = n_temper,
+                              temper_schedule = temper_schedule)
   
-  if (save_rvgaw_results) {
-    saveRDS(rvgaw_results, rvgaw_filepath)
+  if (save_vartest_results) {
+    saveRDS(results, rvgaw_filepath)
   }
-  
-} else {
-  rvgaw_results <- readRDS(rvgaw_filepath)
 }
 
-rvgaw.post_samples <- rvgaw_results$post_samples$phi
-rvgaw.post_samples_phi <- rvgaw_results$post_samples$phi
-rvgaw.post_samples_eta <- rvgaw_results$post_samples$sigma_eta
-# rvgaw.post_samples_xi <- rvgaw_results$post_samples$sigma_xi
+post_samples_phi <- lapply(results, function(x) x$post_samples$phi)
+post_samples_sigma_eta <- lapply(results, function(x) x$post_samples$sigma_eta)
 
 
-par(mfrow = c(1,3))
-plot(density(rvgaw.post_samples_phi), main = "Posterior of phi")
+par(mfrow = c(1,2))
+plot(density(post_samples_phi[[1]]))
+for (r in 2:n_runs) {
+  lines(density(post_samples_phi[[r]]))
+}
 abline(v = phi, lty = 2)
 
-plot(density(rvgaw.post_samples_eta), main = "Posterior of sigma_eta")
+plot(density(post_samples_sigma_eta[[1]]))
+for (r in 2:n_runs) {
+  lines(density(post_samples_sigma_eta[[r]]))
+}
 abline(v = sigma_eta, lty = 2)
+# 
+# 
+# par(mfrow = c(1,3))
+# plot(density(rvgaw.post_samples_phi), main = "Posterior of phi")
+# abline(v = phi, lty = 2)
+# 
+# plot(density(rvgaw.post_samples_eta), main = "Posterior of sigma_eta")
+# abline(v = sigma_eta, lty = 2)
 
-# plot(density(rvgaw.post_samples_xi), main = "Posterior of sigma_xi")
-# abline(v = sqrt(pi^2/2), lty = 2)
-
-## Trajectories
-mu_phi <- sapply(rvgaw_results$mu, function(x) x[1])
-mu_eta <- sapply(rvgaw_results$mu, function(x) x[2])
-# mu_xi <- sapply(rvgaw_results$mu, function(x) x[3])
-
-par(mfrow = c(1, 2))
-plot(tanh(mu_phi), type = "l", main = "Trajectory of phi")
-abline(h = phi, lty = 2)
-
-plot(sqrt(exp(mu_eta)), type = "l", main = "Trajectory of sigma_eta")
-abline(h = sigma_eta, lty = 2)
-
-# plot(sqrt(exp(mu_xi)), type = "l", main = "Trajectory of sigma_xi")
-# abline(h = sqrt(pi^2/2), lty = 2)
+# ## Trajectories
+# mu_phi <- sapply(rvgaw_results$mu, function(x) x[1])
+# mu_eta <- sapply(rvgaw_results$mu, function(x) x[2])
+# # mu_xi <- sapply(rvgaw_results$mu, function(x) x[3])
+# 
+# par(mfrow = c(1, 2))
+# plot(tanh(mu_phi), type = "l", main = "Trajectory of phi")
+# abline(h = phi, lty = 2)
+# 
+# plot(sqrt(exp(mu_eta)), type = "l", main = "Trajectory of sigma_eta")
+# abline(h = sigma_eta, lty = 2)
+# 
+# # plot(sqrt(exp(mu_xi)), type = "l", main = "Trajectory of sigma_xi")
+# # abline(h = sqrt(pi^2/2), lty = 2)
 

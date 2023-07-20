@@ -12,8 +12,10 @@ source("./source/run_rvgaw_lgss_tf.R")
 source("./source/run_mcmc_lgss_allparams.R")
 source("./source/compute_kf_likelihood.R")
 source("./source/compute_whittle_likelihood_lgss.R")
-source("./source/compute_whittle_likelihood_lb.R")
+# source("./source/compute_whittle_likelihood_lb.R")
 source("./source/update_sigma.R")
+
+################## Some code to limit tensorflow memory usage ##################
 
 # List physical devices
 gpus <- tf$config$experimental$list_physical_devices('GPU')
@@ -35,6 +37,8 @@ if (length(gpus) > 0) {
   })
 }
 
+################## End of code to limit tensorflow memory usage ##################
+
 ## Result directory
 result_directory <- "./results/"
 
@@ -44,11 +48,11 @@ regenerate_data <- F
 save_data <- F
 
 rerun_rvgaw <- T
+rerun_mcmcw <- T
 rerun_mcmce <- F
-rerun_mcmcw <- F
 save_rvgaw_results <- F
-save_mcmce_results <- F
 save_mcmcw_results <- F
+save_mcmce_results <- F
 
 ## R-VGA flags
 use_tempering <- T
@@ -69,7 +73,6 @@ phi_string <- sub("(\\d+)\\.(\\d+)", "\\1\\2", toString(phi)) ## removes decimal
 
 # Generate true process x_1:T
 n <- 1000
-# times <- seq(0, 1, length.out = iters)
 
 if (regenerate_data) {
   print("Generating data...")
@@ -181,7 +184,6 @@ if (reorder_freq) {
 
 rvgaw_filepath <- paste0(result_directory, "rvga_whittle_results_", transform, "_n", n,
                          "_phi", phi_string, temper_info, reorder_info, "_", date, ".rds")
-
 
 if (rerun_rvgaw) {
   rvgaw_results <- run_rvgaw_lgss(y = y, #sigma_eta = sigma_eta, sigma_eps = sigma_eps, 
@@ -325,8 +327,3 @@ abline(h = sigma_eta, lty = 2)
 plot(mu_sigma_eps[plot_range], type = "l",
      ylab = "sigma_eps", xlab = "Iterations", main = "Trajectory of sigma_eps")
 abline(h = sigma_eps, lty = 2)
-
-## Lower bound  
-par(mfrow = c(1,1))
-LB <- rvgaw_results$lower_bound
-plot(LB, type = "l")

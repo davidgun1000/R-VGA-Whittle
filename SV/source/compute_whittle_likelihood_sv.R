@@ -5,7 +5,7 @@ compute_whittle_likelihood_sv <- function(y, params) {
   sigma_xi <- params$sigma_xi
   
   ## Compute Whittle likelihood
-  y_tilde <- log(y^2)
+  y_tilde <- log(y^2) - mean(log(y^2))
   
   ## Calculate the spectral density of x, which is an AR(1) process
   k <- seq(-ceiling(n/2)+1, floor(n/2), 1)

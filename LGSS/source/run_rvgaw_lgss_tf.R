@@ -7,7 +7,7 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
                            decreasing = F, 
                            use_matlab_deriv = T, transform = "arctanh") {
   
-  print("Starting R-VGAL with Whittle likelihood...")
+  print("Starting R-VGA with Whittle likelihood...")
   
   rvgaw.t1 <- proc.time()
   
@@ -53,7 +53,7 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
   
   for (i in 1:length(freq)) {
     
-    cat("i =", i, "\n")
+    # cat("i =", i, "\n")
     
     a_vals <- 1
     if (use_tempering) {
@@ -88,13 +88,13 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
         grad_expr <- 0
         grad2_expr <- 0
         
-        if (transform == "arctanh") {
+        # if (transform == "arctanh") {
           grad_expr <- Deriv(log_likelihood_arctanh, c("theta_phi", "theta_eta", "theta_eps"))
           grad2_expr <- Deriv(grad_expr, c("theta_phi", "theta_eta", "theta_eps"))
-        } else {
-          grad_expr <- Deriv(log_likelihood_logit, c("theta_phi", "theta_eta", "theta_eps"))
-          grad2_expr <- Deriv(grad_expr, c("theta_phi", "theta_eta", "theta_eps"))
-        }
+        # } else {
+        #   grad_expr <- Deriv(log_likelihood_logit, c("theta_phi", "theta_eta", "theta_eps"))
+        #   grad2_expr <- Deriv(grad_expr, c("theta_phi", "theta_eta", "theta_eps"))
+        # }
         
         # Gradient
         grad_deriv <- mapply(grad_expr, theta_phi = theta_phi, 
@@ -116,7 +116,7 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
         E_grad <- E_grad_deriv
         E_hessian <- E_hessian_deriv
         
-      } else {
+      } else { # use Tensorflow to compute the grad and hessian
         tf.t1 <- proc.time()
         
         theta_phi_tf <- tf$Variable(theta_phi)
@@ -126,13 +126,11 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
         freq_i_tf <- tf$Variable(freq[i])
         I_i_tf <- tf$Variable(I[[i]])
 
-        if (transform == "arctanh") {
+        # if (transform == "arctanh") {
           tf_out <- compute_grad_arctanh(theta_phi_tf, theta_eta_tf, theta_eps_tf, I_i_tf, freq_i_tf)
-        } else {
-          tf_out <- compute_grad_logit(theta_phi_tf, theta_sigma_tf, I_i_tf, freq_i_tf)
-        }
-        
-        # log_likelihood <- log_likelihood + as.vector(tf_out$log_likelihood) ## maybe need to compute the log likelhood up to the ith freq rather than just at the ith freq? 
+        # } else {
+        #   tf_out <- compute_grad_logit(theta_phi_tf, theta_sigma_tf, I_i_tf, freq_i_tf)
+        # }
         
         grads_tf <- tf_out$grad
         hessians_tf <- tf_out$hessian
@@ -142,46 +140,56 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
         
         ## batch-extract diagonals, and then extract first element of diagonal as grad2_phi(1),
         ## second element as grad2_phi(2) etc
-        grad2_phi_tf <- diag(as.matrix(hessians_tf[[1]][1,,], S, S)) #grad2_phi
-        grad2_phi_eta_tf <- diag(as.matrix(hessians_tf[[1]][2,,], S, S)) #grad2_phi_sigma
-        grad2_phi_eps_tf <- diag(as.matrix(hessians_tf[[1]][3,,], S, S)) #grad2_phi_sigma
+        grad2_phi_tf <- tf$linalg$diag_part(hessians_tf[[1]])
+        grad2_eta_tf <- tf$linalg$diag_part(hessians_tf[[2]])
+        grad2_eps_tf <- tf$linalg$diag_part(hessians_tf[[3]])
         
-        grad2_eta_phi_tf <- diag(as.matrix(hessians_tf[[2]][1,,], S, S)) #grad2_sigma_phi
-        grad2_eta_tf <- diag(as.matrix(hessians_tf[[2]][2,,], S, S)) #grad2_sigma
-        grad2_eta_eps_tf <- diag(as.matrix(hessians_tf[[2]][3,,], S, S)) #grad2_sigma
+        E_grad2_phi_tf <- tf$math$reduce_mean(grad2_phi_tf, 1L) #rowMeans(as.matrix(grad2_phi))
+        E_grad2_eta_tf <- tf$math$reduce_mean(grad2_eta_tf, 1L) #rowMeans(as.matrix(grad2_eta))
+        E_grad2_eps_tf <- tf$math$reduce_mean(grad2_eps_tf, 1L) #rowMeans(as.matrix(grad2_eps))
         
-        grad2_eps_phi_tf <- diag(as.matrix(hessians_tf[[3]][1,,], S, S)) #grad2_sigma_phi
-        grad2_eps_eta_tf <- diag(as.matrix(hessians_tf[[3]][2,,], S, S)) #grad2_sigma
-        grad2_eps_tf <- diag(as.matrix(hessians_tf[[3]][3,,], S, S)) #grad2_sigma
+        # E_grad2_phi <- rowMeans(as.matrix(grad2_phi))
+        # E_grad2_eta <- rowMeans(as.matrix(grad2_eta))
+        # E_grad2_eps <- rowMeans(as.matrix(grad2_eps))
         
-        # take mean of each element in Hessian, then put them together in a 2x2 matrix E_hessian
-        E_grad2_phi_tf <- mean(grad2_phi_tf)
-        E_grad2_eta_tf <- mean(grad2_eta_tf)
-        E_grad2_eps_tf <- mean(grad2_eps_tf)
+        E_hessian_tf <- tf$stack(list(E_grad2_phi_tf, E_grad2_eta_tf, E_grad2_eps_tf), 1L)
+        # E_hessian_tf <- as.matrix(rbind(E_grad2_phi_tf, E_grad2_eta_tf, E_grad2_eps_tf))
+        E_hessian_tf <- as.matrix(E_hessian_tf)
         
-        E_grad2_phi_eta_tf <- mean(grad2_phi_eta_tf)
-        E_grad2_phi_eps_tf <- mean(grad2_phi_eps_tf)
-        E_grad2_eta_eps_tf <- mean(grad2_eta_eps_tf)
+        ##
         
-        E_hessian_tf <- diag(c(E_grad2_phi_tf, E_grad2_eta_tf, E_grad2_eps_tf))
-        E_hessian_tf[2, 1] <- mean(grad2_phi_eta_tf)
-        E_hessian_tf[3, 1] <- mean(grad2_phi_eps_tf)
-        E_hessian_tf[3, 2] <- mean(grad2_eta_eps_tf)
-        
-        E_hessian_tf[upper.tri(E_hessian_tf)] <- t(E_hessian_tf[lower.tri(E_hessian_tf)])
-          
+        # grad2_phi_tf <- diag(as.matrix(hessians_tf[[1]][1,,], S, S)) #grad2_phi
+        # grad2_phi_eta_tf <- diag(as.matrix(hessians_tf[[1]][2,,], S, S)) #grad2_phi_sigma
+        # grad2_phi_eps_tf <- diag(as.matrix(hessians_tf[[1]][3,,], S, S)) #grad2_phi_sigma
+        # 
+        # grad2_eta_phi_tf <- diag(as.matrix(hessians_tf[[2]][1,,], S, S)) #grad2_sigma_phi
+        # grad2_eta_tf <- diag(as.matrix(hessians_tf[[2]][2,,], S, S)) #grad2_sigma
+        # grad2_eta_eps_tf <- diag(as.matrix(hessians_tf[[2]][3,,], S, S)) #grad2_sigma
+        # 
+        # grad2_eps_phi_tf <- diag(as.matrix(hessians_tf[[3]][1,,], S, S)) #grad2_sigma_phi
+        # grad2_eps_eta_tf <- diag(as.matrix(hessians_tf[[3]][2,,], S, S)) #grad2_sigma
+        # grad2_eps_tf <- diag(as.matrix(hessians_tf[[3]][3,,], S, S)) #grad2_sigma
+        # 
+        # # take mean of each element in Hessian, then put them together in a 2x2 matrix E_hessian
+        # E_grad2_phi_tf <- mean(grad2_phi_tf)
+        # E_grad2_eta_tf <- mean(grad2_eta_tf)
+        # E_grad2_eps_tf <- mean(grad2_eps_tf)
+        # 
+        # E_grad2_phi_eta_tf <- mean(grad2_phi_eta_tf)
+        # E_grad2_phi_eps_tf <- mean(grad2_phi_eps_tf)
+        # E_grad2_eta_eps_tf <- mean(grad2_eta_eps_tf)
+        # 
+        # E_hessian_tf <- diag(c(E_grad2_phi_tf, E_grad2_eta_tf, E_grad2_eps_tf))
+        # E_hessian_tf[2, 1] <- mean(grad2_phi_eta_tf)
+        # E_hessian_tf[3, 1] <- mean(grad2_phi_eps_tf)
+        # E_hessian_tf[3, 2] <- mean(grad2_eta_eps_tf)
+        # 
+        # E_hessian_tf[upper.tri(E_hessian_tf)] <- t(E_hessian_tf[lower.tri(E_hessian_tf)])
+
         tf.t2 <- proc.time()
         E_grad <- E_grad_tf
         E_hessian <- E_hessian_tf
         
-        ## Compute log likelihood for the lower bound
-        # for (s in 1:S) {
-        #   params <- list(phi = tanh(theta_phi[s]), 
-        #                  sigma_eta = sqrt(exp(theta_eta[s])),
-        #                  sigma_eps = sqrt(exp(theta_eps[s]))
-        #                 )
-        #   log_likelihood[s] <- compute_whittle_likelihood_lb(y = y, params = params, i = i)
-        # }
       }
       
       ## Update variational mean and precision
@@ -195,21 +203,6 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
       mu_temp <- mu_temp + chol2inv(chol(prec_temp)) %*% (a * as.matrix(E_grad))
       
     }  
-    
-    ## Compute lower bound to check for convergence
-    
-    # log_likelihood <- as.vector(tf_out$log_likelihood)
-    log_likelihood <- compute_whittle_likelihood_lb(y = y, 
-                                                    params = list(phi = tanh(theta_phi[1]),
-                                                                  sigma_eta = sqrt(exp(theta_eta[1])),
-                                                                  sigma_eps = sqrt(exp(theta_eps[1]))), 
-                                                    I = I, 
-                                                    freq = freq)
-    log_prior <- dmvnorm(samples, prior_mean, prior_var, log = T)
-    log_q <- dmvnorm(samples, rvgaw.mu_vals[[i]], chol2inv(chol(rvgaw.prec[[i]])), log = T)
-    LB[i] <- mean(log_likelihood + log_prior - log_q)
-    cat("llh =", mean(log_likelihood), ", log prior =", mean(log_prior), 
-        ", log_q = ", mean(log_q), "\n")
     
     rvgaw.prec[[i+1]] <- prec_temp
     rvgaw.mu_vals[[i+1]] <- mu_temp
@@ -280,21 +273,15 @@ compute_grad_arctanh <- tf_function(
                                       tf$math$multiply(2, tf$math$multiply(phi_s, tf$math$cos(freq_i))))
         
         ## add spec_dens_eps here
-        # spec_dens_eps_tf <- tf$math$divide(tf$math$exp(theta_eps_s), tf$math$multiply(2, pi))
         spec_dens_eps_tf <- tf$math$exp(theta_eps_s)
         
         ## then
         spec_dens_y_tf <- spec_dens_x_tf + spec_dens_eps_tf
         
         log_likelihood_tf <- - tf$math$log(spec_dens_y_tf) - tf$multiply(I_i, tf$math$reciprocal(spec_dens_y_tf))
-        # tape1$watch(c(theta_phi_tf, theta_sigma_tf))
-        # log_likelihood <- tf$math$pow(theta_phi_tf, 3) + tf$math$pow(theta_sigma_tf, 3)
-        # log_likelihood <- tf$math$pow(theta_tf[, 1], 3) + tf$math$pow(theta_tf[, 2], 3)
         
       })
-      # c(grad_theta_phi, grad_theta_sigma) %<-% tape1$gradient(log_likelihood, c(theta_phi_tf, theta_sigma_tf))
       grad_tf %<-% tape1$gradient(log_likelihood_tf, c(theta_phi_s, theta_eta_s, theta_eps_s))
-      # grad %<-% tape1$gradient(log_likelihood, c(theta_tf[, 1], theta_tf[, 2]))
       
       grad_tf <- tf$reshape(grad_tf, c(3L, dim(grad_tf[[1]])))
     })
