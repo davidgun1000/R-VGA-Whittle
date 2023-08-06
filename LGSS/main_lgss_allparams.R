@@ -44,7 +44,7 @@ result_directory <- "./results/"
 
 ## Flags
 date <- "20230525"
-regenerate_data <- F
+regenerate_data <- T
 save_data <- F
 
 rerun_rvgaw <- T
@@ -71,24 +71,26 @@ phi <- 0.9
 ## For the result filename
 phi_string <- sub("(\\d+)\\.(\\d+)", "\\1\\2", toString(phi)) ## removes decimal point fron the number
 
-# Generate true process x_1:T
 n <- 1000
 
 if (regenerate_data) {
   print("Generating data...")
+  
+  # Generate true process x_0:T
   x <- c()
-  x[1] <- 1
+  x0 <- rnorm(1, 0, sqrt(sigma_eta^2 / (1-phi^2)))
+  x[1] <- x0
   set.seed(2023)
-  for (t in 2:n) {
+  for (t in 2:(n+1)) {
     x[t] <- phi * x[t-1] + rnorm(1, 0, sigma_eta)
   }
   
   # Generate observations y_1:T
-  y <- x + rnorm(n, 0, sigma_eps)
+  y <- x[2:(n+1)] + rnorm(n, 0, sigma_eps)
   
   ## Plot true process and observations
   # par(mfrow = c(1, 1))
-  # plot(x, type = "l", main = "True process")
+  plot(x, type = "l", main = "True process")
   # points(y, col = "cyan")
   
   lgss_data <- list(x = x, y = y, phi = phi, sigma_eps = sigma_eps, sigma_eta = sigma_eta)
@@ -189,7 +191,7 @@ if (rerun_rvgaw) {
   rvgaw_results <- run_rvgaw_lgss(y = y, #sigma_eta = sigma_eta, sigma_eps = sigma_eps, 
                                   prior_mean = prior_mean, prior_var = prior_var, 
                                   deriv = "tf", 
-                                  S = 200, use_tempering = use_tempering, 
+                                  S = 100, use_tempering = use_tempering, 
                                   reorder_freq = reorder_freq,
                                   decreasing = decreasing, 
                                   n_temper = n_temper,

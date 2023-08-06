@@ -1,7 +1,7 @@
 run_mcmc_sv <- function(y, #sigma_eta, sigma_xi, 
                         iters = 10000, burn_in = 1000,
                        prior_mean = 0, prior_var = 1, 
-                       state_ini_mean = 0, state_ini_var = 1, nParticles = 500, 
+                       state_ini_mean = 0, state_ini_var = 1, nParticles = 100, 
                        adapt_proposal = T, use_whittle_likelihood = F) {
   
   mcmc.t1 <- proc.time()
@@ -11,7 +11,9 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
   
   param_dim <- length(prior_mean)
   
-  post_samples_theta <- matrix(NA, iters, param_dim)
+  post_samples <- post_samples_theta <- matrix(NA, iters, param_dim)
+  # post_samples contains posterior samples on the original scale
+  # post_samples_theta contains posterior samples on the tranformed scale
   
   ## Initial values: sample params from prior
   theta_curr <- rmvnorm(1, prior_mean, prior_var)
@@ -29,7 +31,7 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
   #   sigma_xi_curr <- sqrt(var(log(sim_eps^2)))
   # }
   
-  ## Proposal variancel
+  ## Proposal variance
   D <- diag(c(1, 1))
   if (adapt_proposal) {
     scale <- 1
@@ -80,8 +82,9 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
     
     if (i %% (iters/10) == 0) {
       cat(i/iters * 100, "% complete \n")
-      cat("Current params:", unlist(params_curr), "\n")
-      cat("------------------------------------------------------------------\n")
+      cat("Acceptance rate:", sum(accept)/length(accept), "\n")
+      # cat("Current params:", unlist(params_curr), "\n")
+      # cat("------------------------------------------------------------------\n")
     }
     
     ## 2. Calculate likelihood
@@ -100,6 +103,7 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
                           sigma_xi = sigma_xi)
       pf_out <- particleFilter(y = y, N = nParticles, iniState = 0, param = params_prop)
       log_likelihood_prop <- pf_out$log_likelihood
+      
     }
     
     ## 3. Calculate prior
@@ -125,7 +129,8 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
     
     ## Store parameter 
     # if (use_whittle_likelihood) {
-      post_samples_theta[i, ] <- c(params_curr$phi, params_curr$sigma_eta)
+      post_samples_theta[i, ] <- theta_curr # !! SHOULD THIS ACTUALLY BE BASED ON THETA_CURR (THE TRANSFORMED PARAMETERS) RATHER THAN THE ORIGINAL-SCALED PARAMETERS?
+      post_samples[i, ] <- c(params_curr$phi, params_curr$sigma_eta)
     # } else {
     #   post_samples_theta[i, ] <- c(params_curr$phi, params_curr$sigma_eta, params_curr$sigma_xi)
     # }
@@ -142,8 +147,8 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
   mcmc.t2 <- proc.time()
   
   ## Extract samples
-  post_samples_phi <- post_samples_theta[, 1]
-  post_samples_eta <- post_samples_theta[, 2]
+  post_samples_phi <- post_samples[, 1] #post_samples_theta[, 1]
+  post_samples_eta <- post_samples[, 2] #post_samples_theta[, 2]
   # post_samples_xi <- post_samples_theta[, 3]
   mcmc.post_samples <- list(phi = post_samples_phi,
                             sigma_eta = post_samples_eta) #,

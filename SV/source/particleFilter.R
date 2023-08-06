@@ -1,14 +1,15 @@
 particleFilter <- function(y, N = 500, iniState = 0, params) {
   
-  obs <- log(y^2) - mean(log(y^2))
+  obs <- log(y^2) - mean(log(y^2)) # de-mean
   Tfin <- length(obs)
   phi <- params$phi
   sigma_eta <- params$sigma_eta
-  sigma_eps <- params$sigma_eps 
+  # sigma_eps <- params$sigma_eps 
+  sigma_eps <- 1
   
   # create state and weight matrices
-  x_pf <- matrix(nrow = N, ncol = Tfin)
-  weights <- norm_weights <- matrix(nrow =  N, ncol = Tfin)
+  x_pf <- matrix(nrow = N, ncol = Tfin+1)
+  weights <- norm_weights <- matrix(nrow =  N, ncol = Tfin+1)
   log_likelihood <- 0
   
   # intial (at t=1):
@@ -18,8 +19,8 @@ particleFilter <- function(y, N = 500, iniState = 0, params) {
   # calculate weights, i.e. probability of evidence given sample from X
   E_log_eps2 <- digamma(1/2) + log(2)
   pseudo_xi <- obs[1] - x_pf[, 1] + E_log_eps2
-  # weights[, 1] <- dchisq(exp(pseudo_xi), 1) * exp(pseudo_xi)
-  weights[, 1] <- dgamma(exp(pseudo_xi), shape = 1/2, scale = 2*sigma_eps^2) * exp(pseudo_xi)
+  weights[, 1] <- dchisq(exp(pseudo_xi), 1) * exp(pseudo_xi)
+  # weights[, 1] <- dgamma(exp(pseudo_xi), shape = 1/2, scale = 2*sigma_eps^2) * exp(pseudo_xi)
   
   # calculate likelihood
   log_likelihood <- log(mean(weights[, 1]))
@@ -42,15 +43,15 @@ particleFilter <- function(y, N = 500, iniState = 0, params) {
   # weighted resampling with replacement. This ensures that X will converge to the true distribution
   x_pf[, 1] <- sample(x_pf[, 1], replace = TRUE, size = N, prob = norm_weights[, 1]) 
   
-  for (t in 2:Tfin) {
+  for (t in 2:(Tfin+1)) {
     # predict x_{t} from previous time step x_{t-1}
     # based on process (transition) model
     x_pf[, t] <- rnorm(N, phi * x_pf[, t-1], sigma_eta)
     # calculate  and normalise weights
     # weights[, t] <- dnorm(obs[t], x_pf[, t], sy)
-    pseudo_xi <- obs[t] - x_pf[, t] + E_log_eps2
-    # weights[, t] <- dchisq(exp(pseudo_xi), 1) * exp(pseudo_xi)
-    weights[, t] <- dgamma(exp(pseudo_xi), shape = 1/2, scale = 2*sigma_eps^2) * exp(pseudo_xi)
+    pseudo_xi <- obs[t-1] - x_pf[, t] + E_log_eps2
+    weights[, t] <- dchisq(exp(pseudo_xi), 1) * exp(pseudo_xi)
+    # weights[, t] <- dgamma(exp(pseudo_xi), shape = 1/2, scale = 2*sigma_eps^2) * exp(pseudo_xi)
     
     # estimate likelihood
     log_likelihood <- log_likelihood + log(mean(weights[, t]))

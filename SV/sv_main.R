@@ -38,7 +38,7 @@ if (length(gpus) > 0) {
 date <- "20230626"
 
 ## R-VGA flags
-regenerate_data <- T
+regenerate_data <- F
 save_data <- F
 use_tempering <- T
 reorder_freq <- T
@@ -48,10 +48,10 @@ reorder_seed <- 2024
 ## Flags
 rerun_rvgaw <- T
 rerun_mcmcw <- T
-rerun_mcmce <- F
+rerun_mcmce <- T
 
-save_rvgaw_results <- T
-save_mcmcw_results <- T
+save_rvgaw_results <- F
+save_mcmcw_results <- F
 save_mcmce_results <- F
 
 ## Generate data
@@ -62,20 +62,24 @@ sigma_eps <- 1
 kappa <- 10
 x1 <- rnorm(1, mu, sigma_eta^2 / (1 - phi^2))
 n <- 1000
-x <- c()
-x[1] <- x1
 
 ## For the result filename
 phi_string <- sub("(\\d+)\\.(\\d+)", "\\1\\2", toString(phi)) ## removes decimal point fron the number
 
 ## Generate data
 if (regenerate_data) {
-  for (t in 2:n) {
+  x <- c()
+  x[1] <- x1
+  
+  for (t in 2:(n+1)) {
     x[t] <- phi * x[t-1] + sigma_eta * rnorm(1, 0, 1)
   }
   
   eps <- rnorm(n, 0, sigma_eps)
-  y <- kappa * exp(x/2) * eps
+  y <- kappa * exp(x[2:(n+1)]/2) * eps
+  
+  par(mfrow = c(1,1))
+  plot(x, type = "l")
   
   sv_data <- list(x = x, y = y, phi = phi, sigma_eta = sigma_eta, 
                   sigma_eps = sigma_eps, kappa = kappa)
@@ -113,20 +117,20 @@ if (regenerate_data) {
 # test_xi <- log(test_eps^2)
 # var(test_xi)
 
-# Test exact likelihood
+# # Test exact likelihood
 # phi_grid <- seq(0.01, 0.99, length.out = 100)
 # llh <- c()
 # 
 # for (k in 1:length(phi_grid)) {
 #   params_pf <- list(phi = phi_grid[k], sigma_eta = sigma_eta, sigma_eps = sigma_eps,
 #                     sigma_xi = sqrt(pi^2/2))
-#   pf_out <- particleFilter(y = y, N = 500, iniState = 0, param = params_pf)
+#   pf_out <- particleFilter(y = y, N = 100, iniState = 0, param = params_pf)
 #   llh[k] <- pf_out$log_likelihood
 # }
 # 
 # plot(phi_grid, llh, type = "l")
-# abline(v = phi_grid[which.max(llh)], col = "red",lty = 2)
-
+# abline(v = phi_grid[which.max(llh)], col = "red", lty = 2)
+# 
 # browser()
 
 ########################################
@@ -199,7 +203,7 @@ mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_results_n", n,
 adapt_proposal <- T
 
 n_post_samples <- 10000
-burn_in <- 5000
+burn_in <- 2000
 MCMC_iters <- n_post_samples + burn_in
 
 # prior_mean <- rep(0, 3)
@@ -324,6 +328,7 @@ legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
 mean_log_eps2 <- digamma(1/2) + log(2)
 log_kappa2 <- mean(log(y^2)) - mean_log_eps2
 kappa <- sqrt(exp(log_kappa2))
+
 # Construct covariance matrix of x
 # t_vec <- seq(0, n-1, 1)
 # Sigma_x <- sigma_eta^2/(1-phi^2) * phi^abs(outer(t_vec, t_vec, "-")) ## need to replace these with estimates of sigma_eta and phi later
