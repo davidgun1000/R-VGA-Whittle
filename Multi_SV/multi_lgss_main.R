@@ -54,7 +54,7 @@ for (t in 1:Tfin) {
 ## Test: Plot Whittle likelihood on a grid
 
 phi_grid <- seq(0.1, 1, length.out = 50)
-sigma_eta_grid <- seq(0.1, 2, length.out = 50)
+sigma_eta_grid <- seq(0.1, 1, length.out = 50)
 
 # test <- compute_whittle_likelihood_multi_sv(Y = Y, 
 #                                                params = list(A = A, Sigma_eta = Sigma_eta))
@@ -65,11 +65,11 @@ llh <- c()
 options(warn=2)
 for (j in 1:length(phi_grid)) {
   cat("j = ", j, "\n")
-  Phimat <- matrix(c(phi_grid[j], phi12, phi21, phi22), 2, 2, byrow = T)
-  # Sigma_eta_j <- diag(c(sigma_eta_grid[j], sigma_eta2))
+  # Phimat <- matrix(c(phi_grid[j], phi12, phi21, phi22), 2, 2, byrow = T)
+  Sigma_eta_j <- diag(c(sigma_eta1, sigma_eta_grid[j]))
   llh[j] <- compute_whittle_likelihood_multi_lgss(Y = Y, 
-                                            params = list(Phi = Phimat, 
-                                                          Sigma_eta = Sigma_eta, #_j,
+                                            params = list(Phi = Phi, 
+                                                          Sigma_eta = Sigma_eta_j, #_j,
                                                           Sigma_eps = Sigma_eps))
 }
 
@@ -79,12 +79,21 @@ if (any(Im(llh) - 0 > 1e-10)) { # if imaginary part is effectively zero, get rid
   llh <- Re(llh) 
 }
 
-par(mfrow = c(1,2))
-plot(phi_grid, llh, type = "l")
-abline(v = phi11, col = "black", lty = 2)
-abline(v = phi_grid[which.max(llh)], col = "red", lty = 2)
-legend("topleft", legend = c("True parameter", "arg max (llh)"), 
+# par(mfrow = c(1,2))
+# plot(phi_grid, llh, type = "l")
+# abline(v = phi11, col = "black", lty = 2)
+# abline(v = phi_grid[which.max(llh)], col = "red", lty = 2)
+# legend("topleft", legend = c("True parameter", "arg max (llh)"), 
+#        col = c("black", "red"), lty = 2)
+
+par(mfrow = c(1,1))
+plot(sigma_eta_grid, llh, type = "l")
+abline(v = Sigma_eta[2,2], col = "black", lty = 2)
+abline(v = sigma_eta_grid[which.max(llh)], col = "red", lty = 2)
+legend("bottomright", legend = c("True parameter", "arg max (llh)"), 
        col = c("black", "red"), lty = 2)
+
+browser()
 
 ##########################################
 ##         R-VGAL implementation        ##
@@ -148,7 +157,7 @@ L[2,1] <- samples[7]
 Sigma_eta_sample <- L %*% t(L)
 
 ## 3. Map (A, Sigma_eta) to (Phi, Sigma_eta) using the mapping in Ansley and Kohn (1986)
-Phi_sample <- backward_map(A_sample, Sigma_eta_sample)
+Phi_sample <- backward_mahp(A_sample, Sigma_eta_sample)
 
 ## 4. Calculate the likelihood
 llh <- compute_whittle_likelihood_multi_lgss(Y = Y, 

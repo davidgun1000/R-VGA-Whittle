@@ -1,6 +1,6 @@
 ## Calculate the gradient and Hessian of the likelihood based on those samples
 compute_grad_hessian <- tf_function(
-  testf <- function(samples_tf, I_i, freq_i) {
+  testf <- function(samples_tf, I_i, freq_i, use_cholesky = F) {
     with (tf$GradientTape() %as% tape2, {
       with (tf$GradientTape(persistent = TRUE) %as% tape1, {
         
@@ -8,14 +8,18 @@ compute_grad_hessian <- tf_function(
         A_samples_tf <- tf$reshape(A_samples_tf, c(dim(A_samples_tf)[1], 2L, 2L))
         
         ## Construct Sigma_eta
-        zero_vec <- tf$constant(rep(0, S), dtype = "float64")
-        L_elements <- tf$concat(list(tf$reshape(tf$exp(samples_tf[, 5]), c(S, 1L)), 
-                                     tf$reshape(zero_vec, c(S, 1L)),
-                                     tf$reshape(samples_tf[, 7], c(S, 1L)),
-                                     tf$reshape(tf$exp(samples_tf[, 6]), c(S, 1L))
-        ), axis = 1L)
-        L_tf <- tf$reshape(L_elements, c(S, 2L, 2L))
-        Sigma_eta_samples_tf <- tf$linalg$matmul(L_tf, tf$transpose(L_tf, perm = c(0L, 2L, 1L)))
+        if (use_cholesky) {
+          zero_vec <- tf$constant(rep(0, S), dtype = "float64")
+          L_elements <- tf$concat(list(tf$reshape(tf$exp(samples_tf[, 5]), c(S, 1L)), 
+                                       tf$reshape(zero_vec, c(S, 1L)),
+                                       tf$reshape(samples_tf[, 7], c(S, 1L)),
+                                       tf$reshape(tf$exp(samples_tf[, 6]), c(S, 1L))
+          ), axis = 1L)
+          L_tf <- tf$reshape(L_elements, c(S, 2L, 2L))
+          Sigma_eta_samples_tf <- tf$linalg$matmul(L_tf, tf$transpose(L_tf, perm = c(0L, 2L, 1L)))
+        } else {
+          Sigma_eta_samples_tf <- tf$linalg$diag(tf$exp(samples_tf[, 5:6]))
+        }
         
         ## Map A to Phi 
         Phi_samples_tf <- backward_map_tf(A_samples_tf, Sigma_eta_samples_tf)
@@ -39,11 +43,11 @@ compute_grad_hessian <- tf_function(
         
         # freq_tf <- freq_i #freq[j] 
         # I_tf <- tf$Variable(I_i) #tf$constant(I_all[,,j])
-        I_tf_reshaped <- tf$reshape(I_tf, c(1L, dim(I_tf)))
+        I_tf_reshaped <- tf$reshape(I_i, c(1L, dim(I_i)))
         I_tf_tiled <- tf$tile(I_tf_reshaped, c(S, 1L, 1L))
         
         Phi_mat <- tf$cast(Phi_0_tf, "complex128") - tf$multiply(tf$cast(Phi_1_tf, "complex128"), 
-                                                                 tf$exp(tf$multiply(-1i, tf$cast(freq_tf, "complex128"))))
+                                                                 tf$exp(tf$multiply(-1i, tf$cast(freq_i, "complex128"))))
         Phi_inv_tf <- tf$linalg$inv(Phi_mat)
         Phi_inv_H_tf <- tf$math$conj(tf$transpose(Phi_inv_tf, perm = c(0L, 2L, 1L))) # perm is to make sure transposes are done on the 2x2 matrix not on the batch dimension
         
@@ -72,15 +76,12 @@ compute_grad_hessian <- tf_function(
       })
       grad_tf %<-% tape1$gradient(log_likelihood_tf, samples_tf)
       
-      # grad %<-% tape1$gradient(log_likelihood, c(theta_tf[, 1], theta_tf[, 2]))
-      # grad_tf <- tf$reshape(grad_tf, c(2L, dim(grad_tf[[1]])))
     })
     grad2_tf %<-% tape2$batch_jacobian(grad_tf, samples_tf)
-    # grad2_tf %<-% tape2$jacobian(grad_tf, c(theta_phi, theta_eta))
     
     return(list(llh = log_likelihood_tf,
                 grad = grad_tf,
                 hessian = grad2_tf))
   },
-  reduce_retracing=T
+  reduce_retracing=F
 )

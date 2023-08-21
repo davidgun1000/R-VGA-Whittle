@@ -28,5 +28,6 @@ compute_whittle_likelihood_sv <- function(y, params) {
   
   log_whittle <- - sum(part1 + part2)
   
-  return(log_whittle)
+  return(list(log_likelihood = log_whittle, spec_dens_x = spectral_dens_x))
+  # return(spectral_dens_x)
 }

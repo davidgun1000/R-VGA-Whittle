@@ -13,36 +13,66 @@ compute_whittle_likelihood_multi_sv <- function(Y, params) {
   
   # ## astsa package
   Z <- log(Y^2) - rowMeans(log(Y^2))
-  fft_out <- mvspec(t(Z), plot = F)
+  fft_out <- mvspec(t(Z), detrend = F, plot = F)
   I_all <- fft_out$fxx
   
+  # Z_list <- lapply(seq_len(ncol(Z)), function(i) Z[,i])
+  # I_all <- list()
+  # J <- list()
+  # for (j in 1:length(freq)) {
+  # 
+  #   mult_factor <- exp(-1i * freq[j] * (1:Tfin))
+  #   J_elements <- mapply("*", Z_list, mult_factor, SIMPLIFY = F)
+  #   J_mat <- matrix(unlist(J_elements), nrow = nrow(Z), ncol = ncol(Z))
+  #   J[[j]] <- rowSums(J_mat)
+  # 
+  #   I_all[[j]] <- 1/Tfin * J[[j]] %*% t(Conj(J[[j]]))
+  # }
+  # 
   # Spectral density matrix
   Phi_0 <- diag(2)
   Phi_1 <- Phi
   Theta <- diag(2)
   
   log_likelihood <- 0
+  spec_dens_X <- list()
+  
+  # spec_dens1 <- compute_whittle_likelihood_sv(y = Y[1, ],
+  #                                             params = list(phi = Phi[1,1],
+  #                                                           sigma_eta = Sigma_eta[1,1]))$spec_dens_x
+  # 
+  # spec_dens2 <- compute_whittle_likelihood_sv(y = Y[2, ],
+  #                                             params = list(phi = Phi[2,2],
+  #                                                           sigma_eta = Sigma_eta[2,2]))$spec_dens_x
+
   for (k in 1:length(freq)) {
     Phi_inv <- solve(Phi_0 - Phi_1 * exp(- 1i * freq[k]))
     Phi_inv_H <- Conj(t(Phi_inv))
     
+    # test <- solve(diag(2) - Phi * exp(- 1i * freq[k])) %*% Sigma_eta %*% 
+    #   solve(diag(2) - t(Phi) * exp(1i * freq[k]))
     # M <- Phi_0 - Phi_1 * exp(- 1i * freq[k])
     # M_H <- Conj(t(M))
     # M_H_inv <- solve(M_H)
     
     # spec_dens_X <- 1/(2*pi) * Phi_inv %*% Theta %*% Sigma_eta %*% Theta %*% Phi_inv_H
-    spec_dens_X <- Phi_inv %*% Theta %*% Sigma_eta %*% Theta %*% Phi_inv_H
+    spec_dens_X[[k]] <- Phi_inv %*% Theta %*% Sigma_eta %*% Theta %*% Phi_inv_H
+    
+    # spec_dens_X[[k]] <- diag(c(spec_dens1[k], spec_dens2[k]))
     
     # spec_dens_Xi <- 1/(2*pi) * diag(pi^2/2, 2)
     spec_dens_Xi <- diag(pi^2/2, 2)
     
-    spec_dens <- spec_dens_X + spec_dens_Xi  
+    spec_dens <- spec_dens_X[[k]] + spec_dens_Xi  
     
     part2 <- sum(diag(solve(spec_dens) %*% I_all[, , k]))
+    # part2 <- sum(diag(solve(spec_dens) %*% I_all[[k]]))
     
     # log(det(spec_dens))
     
-    det_spec_dens <- prod(eigen(spec_dens)$values)
+    # det_spec_dens <- prod(eigen(spec_dens)$values)
+    det_spec_dens <- prod(diag(spec_dens)) - spec_dens[1,2] * spec_dens[2,1]
+    
     part1 <- log(det_spec_dens)
     
     log_likelihood <- log_likelihood - (part1 + part2)
@@ -55,8 +85,9 @@ compute_whittle_likelihood_multi_sv <- function(Y, params) {
     log_likelihood <- Re(log_likelihood)
   }
   
-  return(log_likelihood)
-  
+  return(list(log_likelihood = log_likelihood,
+              spec_dens_X = spec_dens_X))
+  # return(spec_dens_X)
 }
 
 

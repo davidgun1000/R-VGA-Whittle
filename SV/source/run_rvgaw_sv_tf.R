@@ -188,17 +188,17 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
         # 
         tf.t2 <- proc.time()
         
-        E_grad <- E_grad_tf
-        E_hessian <- E_hessian_tf
+        E_grad <- as.vector(E_grad_tf)
+        E_hessian <- as.matrix(E_hessian_tf)
         
       }
       prec_temp <- prec_temp - a * E_hessian
       
-      if(any(eigen(prec_temp)$value < 0)) {
-        browser()
-      }
+      # if(any(eigen(prec_temp)$value < 0)) {
+      #   browser()
+      # }
       
-      mu_temp <- mu_temp + chol2inv(chol(prec_temp)) %*% (a * as.matrix(E_grad))
+      mu_temp <- mu_temp + chol2inv(chol(prec_temp)) %*% (a * E_grad)
       # mu_temp <- mu_temp + 1/prec_temp * (a * E_grad)
         
     }  
