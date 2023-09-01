@@ -4,9 +4,17 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
   
   mcmc.t1 <- proc.time()
   
-  # n_post_samples <- 10000
-  # burn_in <- 5000
-  # iters <- n_post_samples + burn_in
+  d <- as.integer(nrow(Y))
+  Tfin <- ncol(Y)
+  
+  if (use_cholesky) {
+    param_dim <- d^2 + (d*(d-1)/2 + d) # m^2 AR parameters, 
+    # m*(m-1)/2 + m parameters from the lower Cholesky factor of Sigma_eta
+  } else {
+    param_dim <- d^2 + d
+  }
+
+  ## Set up empty vectors for acceptance, post samples etc
   accept <- rep(0, iters)
   acceptProb <- c()
   
@@ -19,11 +27,22 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
   post_samples <- list()
   post_samples_theta <- matrix(NA, iters, param_dim)
   
+  ## Pre-compute the periodogram for the data
+  ## Fourier frequencies
+  k <- seq(-ceiling(Tfin/2)+1, floor(Tfin/2), 1)
+  k_in_likelihood <- k [k >= 1 & k <= floor((Tfin-1)/2)]
+  freq <- 2 * pi * k_in_likelihood / Tfin
+  
+  ## astsa package
+  Z <- log(Y^2) - rowMeans(log(Y^2))
+  fft_out <- mvspec(t(Z), detrend = F, plot = F)
+  I <- fft_out$fxx
+  
   ## Initial values: sample params from prior
   theta_curr <- rmvnorm(1, prior_mean, prior_var)
   
   ### the first 4 elements will be used to construct A
-  A_curr <- matrix(theta_curr[1:4], 2, 2, byrow = T)
+  A_curr <- matrix(theta_curr[1:(d^2)], d, d, byrow = T)
   
   ### the last 3 will be used to construct L
   if (use_cholesky) {
@@ -31,9 +50,8 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
     L[2,1] <- theta_curr[7]
     Sigma_eta_curr <- L %*% t(L)
   } else {
-    Sigma_eta_curr <- diag(exp(theta_curr[5:6]))
+    Sigma_eta_curr <- diag(exp(theta_curr[(d^2+1):param_dim]))
   }
-  
 
   ## 3. Map (A, Sigma_eta) to (Phi, Sigma_eta) using the mapping in Ansley and Kohn (1986)
   Phi_curr <- backward_map(A_curr, Sigma_eta_curr)
@@ -41,7 +59,8 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
   
   ## 4. Calculate the initial log likelihood
   if (use_whittle_likelihood) {
-    log_likelihood_curr <- compute_whittle_likelihood_multi_sv(Y = Y,
+    log_likelihood_curr <- compute_whittle_likelihood_multi_sv(Y = Y, fourier_freqs = freq,
+                                                               periodogram = I, 
                                                                params = params_curr)$log_likelihood
   } else { 
     # nothing here yet
@@ -60,7 +79,7 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
   for (i in 1:iters) {
     
     # cat("i =", i, "\n")
-    if (i %% (iters/10) == 0) {
+    if (i %% (iters/100) == 0) {
       cat(i/iters * 100, "% complete \n")
       cat("Acceptance rate:", sum(accept)/i, "\n")
       # cat("Current params:", unlist(params_curr), "\n")
@@ -71,7 +90,7 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
     theta_prop <- rmvnorm(1, theta_curr, D)
     
     ### the first 4 elements will be used to construct A
-    A_prop <- matrix(theta_prop[1:4], 2, 2, byrow = T)
+    A_prop <- matrix(theta_prop[1:(d^2)], d, d, byrow = T)
     
     if (use_cholesky) {
       ### the last 3 will be used to construct L
@@ -79,7 +98,7 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
       L[2,1] <- theta_prop[7]
       Sigma_eta_prop <- L %*% t(L)
     } else {
-      Sigma_eta_prop <- diag(exp(theta_prop[5:6]))
+      Sigma_eta_prop <- diag(exp(theta_prop[(d^2+1):param_dim]))
     }
     
     
@@ -89,7 +108,8 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
     
     ## 2. Calculate likelihood
     if (use_whittle_likelihood) {
-      log_likelihood_prop <- compute_whittle_likelihood_multi_sv(Y = Y,
+      log_likelihood_prop <- compute_whittle_likelihood_multi_sv(Y = Y, fourier_freqs = freq,
+                                                                 periodogram = I,
                                                                  params = params_prop)$log_likelihood
     } else { 
       # nothing here yet

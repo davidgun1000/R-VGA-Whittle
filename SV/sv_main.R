@@ -45,28 +45,28 @@ if (length(gpus) > 0) {
 date <- "20230626"
 
 ## R-VGA flags
-regenerate_data <- F
+regenerate_data <- T
 save_data <- F
-use_tempering <- F
-reorder_freq <- T
+use_tempering <- T
+reorder_freq <- F
 decreasing <- T
 reorder_seed <- 2024
 
 ## Flags
-rerun_rvgaw <- F
+rerun_rvgaw <- T
 rerun_mcmcw <- F
 # rerun_mcmce <- F
-rerun_hmc <- T
+rerun_hmc <- F
 
-save_rvgaw_results <- F
+save_rvgaw_results <- T
 save_mcmcw_results <- F
 # save_mcmce_results <- F
 save_hmc_results <- F
 
 ## Generate data
 mu <- 0
-phi <- 0.9
-sigma_eta <- 0.7
+phi <- 0.95
+sigma_eta <- 0.8
 sigma_eps <- 1
 kappa <- 2
 x1 <- rnorm(1, mu, sigma_eta^2 / (1 - phi^2))
@@ -149,7 +149,7 @@ abline(v = phi_grid[which.max(llh)], col = "red", lty = 2)
 ##                R-VGA               ##
 ########################################
 
-S <- 500
+S <- 100
 
 if (use_tempering) {
   n_temper <- 10

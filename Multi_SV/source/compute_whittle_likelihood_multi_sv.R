@@ -1,4 +1,5 @@
-compute_whittle_likelihood_multi_sv <- function(Y, params) {
+compute_whittle_likelihood_multi_sv <- function(Y, fourier_freqs, periodogram,
+                                                params) {
   
   Tfin <- ncol(Y)
   
@@ -6,33 +7,26 @@ compute_whittle_likelihood_multi_sv <- function(Y, params) {
   Sigma_eta <- params$Sigma_eta
   # Sigma_eps <- params$Sigma_eps
   
-  ## Fourier frequencies
-  k <- seq(-ceiling(Tfin/2)+1, floor(Tfin/2), 1)
-  k_in_likelihood <- k [k >= 1 & k <= floor((Tfin-1)/2)]
-  freq <- 2 * pi * k_in_likelihood / Tfin
+  d <- dim(Phi)[1]
   
-  # ## astsa package
-  Z <- log(Y^2) - rowMeans(log(Y^2))
-  fft_out <- mvspec(t(Z), detrend = F, plot = F)
-  I_all <- fft_out$fxx
+  freq <- fourier_freqs
+  I <- periodogram
   
-  # Z_list <- lapply(seq_len(ncol(Z)), function(i) Z[,i])
-  # I_all <- list()
-  # J <- list()
-  # for (j in 1:length(freq)) {
+  # ## Fourier frequencies
+  # k <- seq(-ceiling(Tfin/2)+1, floor(Tfin/2), 1)
+  # k_in_likelihood <- k [k >= 1 & k <= floor((Tfin-1)/2)]
+  # freq <- 2 * pi * k_in_likelihood / Tfin
   # 
-  #   mult_factor <- exp(-1i * freq[j] * (1:Tfin))
-  #   J_elements <- mapply("*", Z_list, mult_factor, SIMPLIFY = F)
-  #   J_mat <- matrix(unlist(J_elements), nrow = nrow(Z), ncol = ncol(Z))
-  #   J[[j]] <- rowSums(J_mat)
-  # 
-  #   I_all[[j]] <- 1/Tfin * J[[j]] %*% t(Conj(J[[j]]))
-  # }
-  # 
+  # # ## astsa package
+  # Z <- log(Y^2) - rowMeans(log(Y^2))
+  # fft_out <- mvspec(t(Z), detrend = F, plot = F)
+  # I_all <- fft_out$fxx
+  
+  
   # Spectral density matrix
-  Phi_0 <- diag(2)
+  Phi_0 <- diag(d)
   Phi_1 <- Phi
-  Theta <- diag(2)
+  Theta <- diag(d)
   
   log_likelihood <- 0
   spec_dens_X <- list()
@@ -55,23 +49,23 @@ compute_whittle_likelihood_multi_sv <- function(Y, params) {
     # M_H <- Conj(t(M))
     # M_H_inv <- solve(M_H)
     
-    # spec_dens_X <- 1/(2*pi) * Phi_inv %*% Theta %*% Sigma_eta %*% Theta %*% Phi_inv_H
     spec_dens_X[[k]] <- Phi_inv %*% Theta %*% Sigma_eta %*% Theta %*% Phi_inv_H
+    # spec_dens_X[[k]] <- Phi_inv %*% Theta %*% Sigma_eta %*% Theta %*% Phi_inv_H
     
-    # spec_dens_X[[k]] <- diag(c(spec_dens1[k], spec_dens2[k]))
-    
-    # spec_dens_Xi <- 1/(2*pi) * diag(pi^2/2, 2)
-    spec_dens_Xi <- diag(pi^2/2, 2)
+    spec_dens_Xi <- diag(pi^2/2, d)
     
     spec_dens <- spec_dens_X[[k]] + spec_dens_Xi  
     
-    part2 <- sum(diag(solve(spec_dens) %*% I_all[, , k]))
+    part2 <- sum(diag(solve(spec_dens) %*% I[, , k]))
     # part2 <- sum(diag(solve(spec_dens) %*% I_all[[k]]))
     
     # log(det(spec_dens))
     
-    # det_spec_dens <- prod(eigen(spec_dens)$values)
-    det_spec_dens <- prod(diag(spec_dens)) - spec_dens[1,2] * spec_dens[2,1]
+    if (d == 2) {
+      det_spec_dens <- prod(diag(spec_dens)) - spec_dens[1,2] * spec_dens[2,1]
+    } else {
+      det_spec_dens <- prod(eigen(spec_dens, only.values = T)$values)
+    }
     
     part1 <- log(det_spec_dens)
     

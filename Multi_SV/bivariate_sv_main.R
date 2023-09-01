@@ -48,50 +48,63 @@ result_directory <- "./results/"
 
 ## Flags
 date <- "20230814"
-regenerate_data <- F
-save_data <- F
+regenerate_data <- T
+save_data <- T
 use_cholesky <- F # use lower Cholesky factor to parameterise Sigma_eta
+prior_type <- "_normal"
 
-rerun_rvgaw <- F
-rerun_mcmcw <- F
-rerun_hmc <- F
+rerun_rvgaw <- T
+rerun_mcmcw <- T
+rerun_hmc <- T
 
-save_rvgaw_results <- F
-save_mcmcw_results <- F
-save_hmc_results <- F
+save_rvgaw_results <- T
+save_mcmcw_results <- T
+save_hmc_results <- T
 
 ## R-VGAW flags
 use_tempering <- T
-reorder_freq <- F
+reorder_freq <- T
 decreasing <- T
 
 #######################
 ##   Generate data   ##
 #######################
 
-dataset <- "1"
+dataset <- "2" 
 
 Tfin <- 1000
 if (regenerate_data) {
-  phi11 <- 0.9
-  phi12 <- 0.1 # dataset1: 0.1, dataset2 : -0.5
-  phi21 <- 0.2 # dataset1: 0.2, dataset2 : -0.1
-  phi22 <- 0.7
-  
-  if (dataset == "0") {
-    Phi <- diag(c(phi11, phi22))  
-  } else {
-    Phi <- matrix(c(phi11, phi12, phi21, phi22), 2, 2, byrow = T)
-  }
   
   sigma_eta1 <- 0.9#4
-  sigma_eta2 <- 1.5 #1.5
+  sigma_eta2 <- 1.2 #1.5
   Sigma_eta <- diag(c(sigma_eta1, sigma_eta2))
   
   sigma_eps1 <- 1 #0.01
   sigma_eps2 <- 1 #0.02
   
   Sigma_eps <- diag(c(sigma_eps1, sigma_eps2))
+  
+  if (dataset == "0") {
+    Phi <- diag(c(phi11, phi22))  
+  } else if (dataset == "2") {
+    Phi <- matrix(c(-0.7, 0.4, 0.9, 0.7), 2, 2, byrow = T)
+  } else if (dataset == "3") {
+    phi11 <- 0.5 #0.9
+    phi12 <- 0.3 #0.1 # dataset1: 0.1, dataset2 : -0.5
+    phi21 <- 0.3 #0.2 # dataset1: 0.2, dataset2 : -0.1
+    phi22 <- 0.6 #0.7
+    Phi <- matrix(c(phi11, phi12, phi21, phi22), 2, 2, byrow = T)
+  } else if (dataset == "4") {
+    Phi <- matrix(c(-0.9, 0.8, -0.2, -0.4), 2, 2, byrow = T)
+  } 
+  
+  else { # generate a random Phi matrix
+    d <- 2
+    A <- matrix(rnorm(d^2), d, d)
+    Phi <- backward_map(A, Sigma_eta)
+    Phi <- round(Phi, digits = 1)
+    print(Phi)
+  }
   
   x1 <- c(0, 0)
   X <- matrix(NA, nrow = length(x1), ncol = Tfin+1) # x_0:T
@@ -109,10 +122,10 @@ if (regenerate_data) {
                   Sigma_eps = Sigma_eps)
   
   if (save_data) {
-    saveRDS(multi_sv_data, file = paste0("./data/multi_sv_data_Tfin", Tfin, "_", date, "_", dataset, ".rds"))
+    saveRDS(multi_sv_data, file = paste0("./data/bivariate_sv_data_Tfin", Tfin, "_", date, "_", dataset, ".rds"))
   }
 } else {
-  multi_sv_data <- readRDS(file = paste0("./data/multi_sv_data_Tfin", Tfin, "_", date, "_", dataset, ".rds"))
+  multi_sv_data <- readRDS(file = paste0("./data/bivariate_sv_data_Tfin", Tfin, "_", date, "_", dataset, ".rds"))
   
   X <- multi_sv_data$X
   Y <- multi_sv_data$Y
@@ -131,7 +144,7 @@ plot(Y[2, ], type = "l")
 ############################## Inference #######################################
 
 ## Construct initial distribution/prior
-prior <- construct_prior(data = Y)
+prior <- construct_prior(data = Y, prior_type = prior_type)
 prior_mean <- prior$prior_mean
 prior_var <- prior$prior_var
 
@@ -171,14 +184,15 @@ if (reorder_freq) {
   reorder_info <- ""
 }
 
-S <- 200L
+S <- 100L
 a_vals <- 1
 
 ################ R-VGA starts here #################
 print("Starting R-VGAL with Whittle likelihood...")
 
 rvgaw_filepath <- paste0(result_directory, "rvga_whittle_results_Tfin", Tfin, 
-                         temper_info, reorder_info, "_", date, "_", dataset, ".rds")
+                         temper_info, reorder_info, "_", date, "_", dataset, 
+                         prior_type, ".rds")
 
 if (rerun_rvgaw) {
   rvgaw_results <- run_rvgaw_multi_sv(data = Y, prior_mean = prior_mean, 
@@ -239,7 +253,7 @@ abline(v = Sigma_eta[2,2], lty = 2)
 print("Starting MCMC with Whittle likelihood...")
 
 mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_results_Tfin", Tfin, 
-                         "_", date, "_", dataset, ".rds")
+                         "_", date, "_", dataset, prior_type, ".rds")
 
 n_post_samples <- 10000
 burn_in <- 5000
@@ -309,7 +323,7 @@ abline(h = Sigma_eta[2,2], col = "red", lty = 2)
 print("Starting HMC...")
 
 hmc_filepath <- paste0(result_directory, "hmc_results_Tfin", Tfin, 
-                       "_", date, "_", dataset, ".rds")
+                       "_", date, "_", dataset, prior_type, ".rds")
 
 
 if (rerun_hmc) {
@@ -331,7 +345,7 @@ if (rerun_hmc) {
   # )
   
   multi_sv_data <- list(d = nrow(Y), Tfin = ncol(Y), Y = Y,
-                        prior_mean_A = prior_mean[1:4], diag_prior_var_A = diag(prior_var)[1:4],
+                        prior_mean_A = prior_mean[c(1,3,2,4)], diag_prior_var_A = diag(prior_var)[c(1,3,2,4)],
                         prior_mean_gamma = prior_mean[5:6], diag_prior_var_gamma = diag(prior_var)[5:6]
   )
   
@@ -362,54 +376,62 @@ hmc.post_samples_Sigma_eta <- stan_results$draws[,,5:8]
 ## Posterior density comparisons
 
 par(mfrow = c(2,4))
-plot(density(mcmcw.post_samples_phi_11), col = "blue", lty = 2, main = "phi_11", 
-     xlim = c(Phi[1,1] + c(-0.1, 0.1)))
-lines(density(rvgaw.post_samples_phi_11), col = "red", lty = 2)
-lines(density(hmc.post_samples_Phi[,,1]), col = "forestgreen")
+
+plot_margin <- c(-0.2, 0.2)
+plot(density(mcmcw.post_samples_phi_11), col = "blue", lty = 2, lwd = 1.5, 
+     main = "phi_11", 
+     xlim = c(Phi[1,1] + plot_margin))
+lines(density(rvgaw.post_samples_phi_11), col = "red", lty = 2, lwd = 1.5,)
+lines(density(hmc.post_samples_Phi[,,1]), col = "forestgreen", lwd = 1.5,)
 # lines(density(mcmcw1.post_samples_phi), col = "green")
 abline(v = Phi[1,1], lty = 2)
+legend("topright", legend = c("MCMCW", "R-VGAW", "HMC"), col = c("blue", "red", "forestgreen"),
+       lty = c(2,2,1), cex = 0.7)
 
-plot(density(mcmcw.post_samples_phi_12), col = "blue", lty = 2, main = "phi_12", 
-     xlim = c(Phi[1,2] + c(-0.1, 0.1)))
-lines(density(rvgaw.post_samples_phi_12), col = "red", lty = 2)
-lines(density(hmc.post_samples_Phi[,,3]), col = "forestgreen")
+plot(density(mcmcw.post_samples_phi_12), col = "blue", lty = 2, lwd = 1.5,
+     main = "phi_12", 
+     xlim = c(Phi[1,2] + plot_margin))
+lines(density(rvgaw.post_samples_phi_12), col = "red", lty = 2, lwd = 1.5,)
+lines(density(hmc.post_samples_Phi[,,3]), col = "forestgreen", lwd = 1.5,)
 abline(v = Phi[1,2], lty = 2)
 
-plot(density(mcmcw.post_samples_phi_21), col = "blue", lty = 2, main = "phi_21", 
-     xlim = c(Phi[2,1] + c(-0.1, 0.1)))
-lines(density(rvgaw.post_samples_phi_21), col = "red", lty = 2)
-lines(density(hmc.post_samples_Phi[,,2]), col = "forestgreen")
+plot(density(mcmcw.post_samples_phi_21), col = "blue", lty = 2, lwd = 1.5, 
+     main = "phi_21", 
+     xlim = c(Phi[2,1] + plot_margin))
+lines(density(rvgaw.post_samples_phi_21), col = "red", lty = 2, lwd = 1.5)
+lines(density(hmc.post_samples_Phi[,,2]), col = "forestgreen", lwd = 1.5)
 abline(v = Phi[2,1], lty = 2)
 
-plot(density(mcmcw.post_samples_phi_22), col = "blue", lty = 2, main = "phi_22", 
-     xlim = c(Phi[2,2] + c(-0.1, 0.1)))
-lines(density(rvgaw.post_samples_phi_22), col = "red", lty = 2)
-lines(density(hmc.post_samples_Phi[,,4]), col = "forestgreen")
+plot(density(mcmcw.post_samples_phi_22), col = "blue", lty = 2, lwd = 1.5, 
+     main = "phi_22", 
+     xlim = c(Phi[2,2] + plot_margin))
+lines(density(rvgaw.post_samples_phi_22), col = "red", lty = 2, lwd = 1.5)
+lines(density(hmc.post_samples_Phi[,,4]), col = "forestgreen", lwd = 1.5)
 abline(v = Phi[2,2], lty = 2)
 
-plot(density(mcmcw.post_samples_sigma_eta_11), col = "blue", lty = 2, 
+plot(density(mcmcw.post_samples_sigma_eta_11), col = "blue", lty = 2, lwd = 1.5,
      main = "sigma_eta_11", xlim = c(Sigma_eta[1,1] + c(-0.25, 0.25)))
-lines(density(rvgaw.post_samples_sigma_eta_11), col = "red", lty = 2)
-lines(density(hmc.post_samples_Sigma_eta[,,1]), col = "forestgreen")
+lines(density(rvgaw.post_samples_sigma_eta_11), col = "red", lty = 2, lwd = 1.5)
+lines(density(hmc.post_samples_Sigma_eta[,,1]), col = "forestgreen", lwd = 1.5)
 # lines(density(mcmcw1.post_samples_sigma_eta2), col = "green")
 abline(v = Sigma_eta[1,1], lty = 2)
 
 if (use_cholesky) {
-  plot(density(mcmcw.post_samples_sigma_eta_12), col = "blue", lty = 2, 
+  plot(density(mcmcw.post_samples_sigma_eta_12), col = "blue", lty = 2, lwd = 1.5,
        main = "sigma_eta_12", xlim = c(Sigma_eta[1,2] + c(-0.25, 0.25)))
-  lines(density(rvgaw.post_samples_sigma_eta_12), col = "red", lty = 2)
+  lines(density(rvgaw.post_samples_sigma_eta_12), col = "red", lty = 2, lwd = 1.5)
   abline(v = Sigma_eta[1,2], lty = 2)
 
-  plot(density(mcmcw.post_samples_sigma_eta_21), col = "blue", lty = 2, 
+  plot(density(mcmcw.post_samples_sigma_eta_21), col = "blue", lty = 2, lwd = 1.5,
        main = "sigma_eta_21")
-  lines(density(rvgaw.post_samples_sigma_eta_21), col = "red", lty = 2)
+  lines(density(rvgaw.post_samples_sigma_eta_21), col = "red", lty = 2, lwd = 1.5)
   abline(v = Sigma_eta[2,1], lty = 2)
 }
 
-plot(density(mcmcw.post_samples_sigma_eta_22), col = "blue", lty = 2, 
+plot(density(mcmcw.post_samples_sigma_eta_22), col = "blue", lty = 2, lwd = 1.5, 
      main = "sigma_eta_22", xlim = c(Sigma_eta[2,2] + c(-0.25, 0.25)))
-lines(density(rvgaw.post_samples_sigma_eta_22), col = "red", lty = 2)
-lines(density(hmc.post_samples_Sigma_eta[,,4]), col = "forestgreen")
+lines(density(rvgaw.post_samples_sigma_eta_22), col = "red", lty = 2, lwd = 1.5)
+lines(density(hmc.post_samples_Sigma_eta[,,4]), col = "forestgreen", lwd = 1.5)
 abline(v = Sigma_eta[2,2], lty = 2)
 
 

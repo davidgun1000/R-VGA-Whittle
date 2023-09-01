@@ -4,8 +4,17 @@ compute_grad_hessian <- tf_function(
     with (tf$GradientTape() %as% tape2, {
       with (tf$GradientTape(persistent = TRUE) %as% tape1, {
         
-        A_samples_tf <- samples_tf[, 1:4]
-        A_samples_tf <- tf$reshape(A_samples_tf, c(dim(A_samples_tf)[1], 2L, 2L))
+        d <- as.integer(dim(I_i)[1])
+        
+        if (use_cholesky) {
+          param_dim <- d^2 + (d*(d-1)/2 + d) # m^2 AR parameters, 
+          # m*(m-1)/2 + m parameters from the lower Cholesky factor of Sigma_eta
+        } else {
+          param_dim <- d^2 + d
+        }
+        
+        A_samples_tf <- samples_tf[, 1:(d^2)]
+        A_samples_tf <- tf$reshape(A_samples_tf, c(dim(A_samples_tf)[1], d, d))
         
         ## Construct Sigma_eta
         if (use_cholesky) {
@@ -18,7 +27,7 @@ compute_grad_hessian <- tf_function(
           L_tf <- tf$reshape(L_elements, c(S, 2L, 2L))
           Sigma_eta_samples_tf <- tf$linalg$matmul(L_tf, tf$transpose(L_tf, perm = c(0L, 2L, 1L)))
         } else {
-          Sigma_eta_samples_tf <- tf$linalg$diag(tf$exp(samples_tf[, 5:6]))
+          Sigma_eta_samples_tf <- tf$linalg$diag(tf$exp(samples_tf[, (d^2+1):param_dim]))
         }
         
         ## Map A to Phi 
@@ -35,7 +44,7 @@ compute_grad_hessian <- tf_function(
         
         
         # Spectral density matrix
-        Phi_0_tf <- tf$eye(2L) #diag(2)
+        Phi_0_tf <- tf$eye(d) #diag(2)
         # Phi_0_reshape <- tf$reshape(Phi_0_tf, c(1L, dim(Phi_0_tf)))
         # Phi_0_tiled <- tf$tile(Phi_0_reshape, c(S, 1L, 1L))
         Phi_1_tf <- Phi_samples_tf #[1,,]
@@ -59,7 +68,7 @@ compute_grad_hessian <- tf_function(
         #                  tf$linalg$matmul(Sigma_eta_test, 
         #                                   tf$linalg$matmul(Theta_tf, Phi_inv_H_tf)))) 
         
-        spec_dens_Xi_tf <- tf$multiply(pi^2/2, tf$eye(2L)) # tf$diag(pi^2/2, 2)
+        spec_dens_Xi_tf <- tf$multiply(pi^2/2, tf$eye(d)) # tf$diag(pi^2/2, 2)
         spec_dens_Xi_tf <- tf$cast(spec_dens_Xi_tf, "complex128")
         
         spec_dens_tf <- spec_dens_X_tf + spec_dens_Xi_tf  

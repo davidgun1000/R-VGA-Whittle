@@ -1,9 +1,17 @@
 run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
                                use_tempering = T, temper_schedule, 
                                reorder_freq = T, decreasing = T,
-                               reorder_seed = 2023, use_cholesky = F) {
+                               reorder_seed = 2023, use_cholesky = F,
+                               n_post_samples = 10000) {
   rvgaw.t1 <- proc.time()
   
+  d <- nrow(data)
+  if (use_cholesky) {
+    param_dim <- d^2 + (d*(d-1)/2 + d) # m^2 AR parameters, 
+    # m*(m-1)/2 + m parameters from the lower Cholesky factor of Sigma_eta
+  } else {
+    param_dim <- d^2 + d
+  }
   
   rvgaw.mu_vals <- list()
   rvgaw.mu_vals[[1]] <- prior_mean
@@ -15,30 +23,31 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   ## Initial values: sample params from prior
   samples <- rmvnorm(S, prior_mean, prior_var)
   
-  # ## Construct A and Sigma_eta from these prior samples
-  # ## Maybe this should be done in tensorflow?
-  # samples2 <- lapply(seq_len(nrow(samples)), function(i) samples[i,])
-  # 
-  # ### the first 4 elements will be used to construct A
-  # A_samples <- lapply(samples2, function(x) matrix(x[1:4], 2, 2, byrow = T))
-  # 
-  # ### the last 3 will be used to construct L
-  # construct_Sigma_eta <- function(theta) {
-  #   L <- diag(exp(theta[5:6]))
-  #   L[2,1] <- theta[7]
-  #   Sigma_eta <- L %*% t(L)
-  #   return(Sigma_eta)
-  # }
-  # 
-  # # L <- diag(exp(theta_samples[1, 5:6]))
-  # # L[2,1] <- theta_samples[1, 7]
-  # # Sigma_eta_curr <- L %*% t(L)
-  # 
-  # Sigma_eta_samples <- lapply(samples2, construct_Sigma_eta)
-  # 
-  # ## Transform samples of A into samples of Phi via the mapping in Ansley and Kohn (1986)
-  # Phi_samples <- mapply(backward_map, A_samples, Sigma_eta_samples, SIMPLIFY = F)
-  # 
+  ## Construct A and Sigma_eta from these prior samples
+  ## Maybe this should be done in tensorflow?
+  samples2 <- lapply(seq_len(nrow(samples)), function(i) samples[i,])
+
+  ### the first 4 elements will be used to construct A
+  A_samples <- lapply(samples2, function(x) matrix(x[1:(d^2)], d, d, byrow = T))
+
+  ### the last 3 will be used to construct L
+  construct_Sigma_eta <- function(theta) {
+    L <- diag(exp(theta[(d^2+1):param_dim]))
+    # L[2,1] <- theta[7]
+    # Sigma_eta <- L %*% t(L)
+    Sigma_eta <- L
+    return(Sigma_eta)
+  }
+
+  # L <- diag(exp(theta_samples[1, 5:6]))
+  # L[2,1] <- theta_samples[1, 7]
+  # Sigma_eta_curr <- L %*% t(L)
+
+  Sigma_eta_samples <- lapply(samples2, construct_Sigma_eta)
+
+  ## Transform samples of A into samples of Phi via the mapping in Ansley and Kohn (1986)
+  Phi_samples <- mapply(backward_map, A_samples, Sigma_eta_samples, SIMPLIFY = F)
+
   # j <- 2
   # llh <- list()
   # for (s in 1:S) {
@@ -119,6 +128,7 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
       
       P <- chol2inv(chol(prec_temp))
       samples <- rmvnorm(S, mu_temp, P)
+      
       # theta_phi <- samples[, 1]
       # theta_eta <- samples[, 2]
       # # theta_xi <- samples[, 3]
@@ -178,14 +188,14 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   ## Posterior samples
   rvgaw.post_var <- chol2inv(chol(rvgaw.prec[[length(freq)]]))
   
-  rvgaw.post_samples <- rmvnorm(10000, rvgaw.mu_vals[[length(freq)]], rvgaw.post_var) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
+  rvgaw.post_samples <- rmvnorm(n_post_samples, rvgaw.mu_vals[[length(freq)]], rvgaw.post_var) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
   
   ## Construct A and Sigma_eta from these posterior samples
   ## Maybe this should be done in tensorflow?
   rvgaw.post_samples2 <- lapply(seq_len(nrow(rvgaw.post_samples)), function(i) rvgaw.post_samples[i,])
   
   ### the first 4 elements will be used to construct A
-  post_samples_A <- lapply(rvgaw.post_samples2, function(x) matrix(x[1:4], 2, 2, byrow = T))
+  post_samples_A <- lapply(rvgaw.post_samples2, function(x) matrix(x[1:(d^2)], d, d, byrow = T))
   
   if (use_cholesky) {
     ### the last 3 will be used to construct L
@@ -197,7 +207,7 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
     }
     post_samples_Sigma_eta <- lapply(rvgaw.post_samples2, construct_Sigma_eta)
   } else {
-    post_samples_Sigma_eta <- lapply(rvgaw.post_samples2, function(x) diag(exp(x[5:6])))
+    post_samples_Sigma_eta <- lapply(rvgaw.post_samples2, function(x) diag(exp(x[(d^2+1):param_dim])))
   }
   
   # L <- diag(exp(theta_samples[1, 5:6]))

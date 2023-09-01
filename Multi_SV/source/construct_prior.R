@@ -1,5 +1,5 @@
-construct_prior <- function(data, use_cholesky = F, byrow = T) {
-  
+construct_prior <- function(data, prior_type = "minnesota", 
+                            use_cholesky = F, byrow = T) {
   
   Y <- data
   m <- nrow(Y) # dimension of VAR_m(p)
@@ -15,32 +15,43 @@ construct_prior <- function(data, use_cholesky = F, byrow = T) {
   # Prior mean
   prior_mean <- rep(0, param_dim)
   
-  # Prior var for the AR parameters -- use Minnesota prior
-  ar_out1 <- arima(Y[1, ], order = c(1, 0, 0))
-  ar_out2 <- arima(Y[2, ], order = c(1, 0, 0))
-  sigma2_estimates <- c(ar_out1$sigma2, ar_out2$sigma2)
-  
-  if (byrow) {
-    indices <- data.frame(i = rep(1:m, each = m), j = rep(1:m, m))
-  } else {
-    indices <- data.frame(i = rep(1:m, m), j = rep(1:m, each = m))
-  }
-  
-  diag_var_A <- c()
-  
-  l = 1
-  lambda_0 = 1
-  theta_0 = 0.2
-  for (k in 1:nrow(indices)) {
-    i <- indices[k, 1]
-    j <- indices[k, 2]
+  # Prior var for the AR parameters
+  if (prior_type == "minnesota") {
+    sigma2_estimates <- c()
     
-    if (i == j) {
-      diag_var_A[k] <- 1
-    } else {
-      diag_var_A[k] <- (lambda_0 * theta_0 / l)^2 * 
-        (sigma2_estimates[i] / sigma2_estimates[j])    
+    for (i in 1:m) {
+      ar_out <- arima(Y[i, ], order = c(1, 0, 0))
+      sigma2_estimates[i] <- ar_out$sigma2
     }
+    # ar_out1 <- arima(Y[1, ], order = c(1, 0, 0))
+    # ar_out2 <- arima(Y[2, ], order = c(1, 0, 0))
+    # sigma2_estimates <- c(ar_out1$sigma2, ar_out2$sigma2)
+    
+    if (byrow) {
+      indices <- data.frame(i = rep(1:m, each = m), j = rep(1:m, m))
+    } else {
+      indices <- data.frame(i = rep(1:m, m), j = rep(1:m, each = m))
+    }
+    
+    diag_var_A <- c()
+    
+    l = 1
+    lambda_0 = 1
+    theta_0 = 0.2
+    for (k in 1:nrow(indices)) {
+      i <- indices[k, 1]
+      j <- indices[k, 2]
+      
+      if (i == j) {
+        diag_var_A[k] <- 1
+      } else {
+        diag_var_A[k] <- (lambda_0 * theta_0 / l)^2 * 
+          (sigma2_estimates[i] / sigma2_estimates[j])    
+      }
+    }
+    
+  } else {
+    diag_var_A <- rep(10, m^2)
   }
   
   diag_var_Sigma <- 0

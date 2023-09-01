@@ -14,7 +14,7 @@ source("./source/compute_kf_likelihood.R")
 source("./source/compute_whittle_likelihood_lgss.R")
 # source("./source/compute_whittle_likelihood_lb.R")
 source("./source/update_sigma.R")
-
+source("./source/run_hmc_lgss.R")
 ################## Some code to limit tensorflow memory usage ##################
 
 # List physical devices
@@ -49,10 +49,12 @@ save_data <- F
 
 rerun_rvgaw <- T
 rerun_mcmcw <- T
-rerun_mcmce <- F
+# rerun_mcmce <- F
+rerun_hmc <- T
 save_rvgaw_results <- F
 save_mcmcw_results <- F
-save_mcmce_results <- F
+# save_mcmce_results <- F
+save_hmc_results <- F
 
 ## R-VGA flags
 use_tempering <- T
@@ -66,7 +68,7 @@ adapt_proposal <- T
 ## True parameters
 sigma_eps <- 0.5 # measurement error var
 sigma_eta <- 0.7 # process error var
-phi <- 0.9
+phi <- 0.8
 
 ## For the result filename
 phi_string <- sub("(\\d+)\\.(\\d+)", "\\1\\2", toString(phi)) ## removes decimal point fron the number
@@ -209,31 +211,31 @@ rvgaw.post_samples_phi <- rvgaw_results$post_samples$phi
 rvgaw.post_samples_eta <- rvgaw_results$post_samples$sigma_eta
 rvgaw.post_samples_eps <- rvgaw_results$post_samples$sigma_eps
 
-################################################################################
-##                        MCMC with exact likelihood                          ##   
-################################################################################
-
-mcmce_filepath <- paste0(result_directory, "mcmc_exact_results_n", n, 
-                         "_phi", phi_string, "_", date, ".rds")
-
-if (rerun_mcmce) {
-  mcmce_results <- run_mcmc_lgss(y, #sigma_eta, sigma_eps, 
-                                 iters = MCMC_iters, burn_in = burn_in,
-                                 prior_mean = prior_mean, prior_var = prior_var, 
-                                 state_ini_mean = state_ini_mean, state_ini_var = state_ini_var,
-                                 adapt_proposal = T, use_whittle_likelihood = F)
-  
-  if (save_mcmce_results) {
-    saveRDS(mcmce_results, mcmce_filepath)
-  }
-  
-} else {
-  mcmce_results <- readRDS(mcmce_filepath)
-}
-
-mcmce.post_samples_phi <- as.mcmc(mcmce_results$post_samples$phi[-(1:burn_in)])
-mcmce.post_samples_eta <- as.mcmc(mcmce_results$post_samples$sigma_eta[-(1:burn_in)])
-mcmce.post_samples_eps <- as.mcmc(mcmce_results$post_samples$sigma_eps[-(1:burn_in)])
+# ################################################################################
+# ##                        MCMC with exact likelihood                          ##   
+# ################################################################################
+# 
+# mcmce_filepath <- paste0(result_directory, "mcmc_exact_results_n", n,
+#                          "_phi", phi_string, "_", date, ".rds")
+# 
+# if (rerun_mcmce) {
+#   mcmce_results <- run_mcmc_lgss(y, #sigma_eta, sigma_eps,
+#                                  iters = MCMC_iters, burn_in = burn_in,
+#                                  prior_mean = prior_mean, prior_var = prior_var,
+#                                  state_ini_mean = state_ini_mean, state_ini_var = state_ini_var,
+#                                  adapt_proposal = T, use_whittle_likelihood = F)
+# 
+#   if (save_mcmce_results) {
+#     saveRDS(mcmce_results, mcmce_filepath)
+#   }
+# 
+# } else {
+#   mcmce_results <- readRDS(mcmce_filepath)
+# }
+# 
+# mcmce.post_samples_phi <- as.mcmc(mcmce_results$post_samples$phi[-(1:burn_in)])
+# mcmce.post_samples_eta <- as.mcmc(mcmce_results$post_samples$sigma_eta[-(1:burn_in)])
+# mcmce.post_samples_eps <- as.mcmc(mcmce_results$post_samples$sigma_eps[-(1:burn_in)])
 
 ################################################################################
 ##                       MCMC with Whittle likelihood                         ##
@@ -261,35 +263,73 @@ mcmcw.post_samples_eta <- as.mcmc(mcmcw_results$post_samples$sigma_eta[-(1:burn_
 mcmcw.post_samples_eps <- as.mcmc(mcmcw_results$post_samples$sigma_eps[-(1:burn_in)])
 
 # Trace plot
-par(mfrow = c(2,1))
-traceplot(mcmce.post_samples_phi, main = "Trace plot for MCMC with exact likelihood")
-traceplot(mcmcw.post_samples_phi, main = "Trace plot for MCMC with Whittle likelihood")
+# par(mfrow = c(2,1))
+# traceplot(mcmce.post_samples_phi, main = "Trace plot for MCMC with exact likelihood")
+# traceplot(mcmcw.post_samples_phi, main = "Trace plot for MCMC with Whittle likelihood")
+
+#########################
+###        STAN       ###
+#########################
+
+hmc_filepath <- paste0(result_directory, "hmc_results_n", n, 
+                       "_phi", phi_string, "_", date, ".rds")
+
+# n_post_samples <- 10000
+# burn_in <- 1000
+stan.iters <- n_post_samples + burn_in
+
+if (rerun_hmc) {
+  stan_results <- run_hmc_lgss(data = y, iters = stan.iters, burn_in = burn_in)
+  
+  if (save_hmc_results) {
+    saveRDS(stan_results, hmc_filepath)
+  }
+  
+} else {
+  stan_results <- readRDS(hmc_filepath)
+}
+
+
+# hmc.fit <- extract(hfit, pars = c("theta_phi", "theta_sigma"),
+#                    permuted = F)
+# 
+# hmc.theta_phi <- hmc.fit[,,1]
+# hmc.theta_sigma <- hmc.fit[,,2]
+
+hmc.post_samples_phi <- stan_results$draws[,,1]#tanh(hmc.theta_phi)
+hmc.post_samples_eta <- stan_results$draws[,,2]#sqrt(exp(hmc.theta_sigma))
+hmc.post_samples_eps <- stan_results$draws[,,3]#sqrt(exp(hmc.theta_sigma))
+
 
 ################################################################################
 ##                            Posterior densities                             ##
 ################################################################################
 
 par(mfrow = c(1,3))
-plot(density(mcmce.post_samples_phi), main = "Posterior of phi", col = "blue")
+# plot(density(mcmce.post_samples_phi), main = "Posterior of phi", col = "blue")
+plot(density(hmc.post_samples_phi), main = "Posterior of phi", col = "blue")
 lines(density(mcmcw.post_samples_phi), col = "blue", lty = 2)
 lines(density(rvgaw.post_samples_phi), col = "red", lty = 2)
 abline(v = phi, lty = 2)
-legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"), 
+legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
        col = c("blue", "blue", "red"), lty = c(1, 2, 2))
 
-plot(density(mcmce.post_samples_eta), main = "Posterior of sigma_eta", col = "blue")
+# plot(density(mcmce.post_samples_eta), main = "Posterior of sigma_eta", col = "blue")
+plot(density(hmc.post_samples_eta), main = "Posterior of sigma_eta", col = "blue")
 lines(density(mcmcw.post_samples_eta), col = "blue", lty = 2)
 lines(density(rvgaw.post_samples_eta), col = "red", lty = 2)
 abline(v = sigma_eta, lty = 2)
-legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"), 
+legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
        col = c("blue", "blue", "red"), lty = c(1, 2, 2))
 
-plot(density(mcmce.post_samples_eps), xlim = c(sigma_eps - 0.1, sigma_eps + 0.15),
+# plot(density(mcmce.post_samples_eps), xlim = c(sigma_eps - 0.1, sigma_eps + 0.15),
+#      main = "Posterior of sigma_epsilon", col = "blue")
+plot(density(hmc.post_samples_eps), xlim = c(sigma_eps - 0.1, sigma_eps + 0.15),
      main = "Posterior of sigma_epsilon", col = "blue")
 lines(density(mcmcw.post_samples_eps), col = "blue", lty = 2)
 lines(density(rvgaw.post_samples_eps), col = "red", lty = 2)
 abline(v = sigma_eps, lty = 2)
-legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"), 
+legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
        col = c("blue", "blue", "red"), lty = c(1, 2, 2))
 
 # ## Trajectories
