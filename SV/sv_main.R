@@ -20,8 +20,6 @@ source("./source/run_hmc_sv.R")
 # source("./source/run_corr_pmmh_sv.R")
 source("./source/particleFilter.R")
 
-result_directory <- "./results/"
-
 # List physical devices
 gpus <- tf$config$experimental$list_physical_devices('GPU')
 
@@ -42,31 +40,38 @@ if (length(gpus) > 0) {
   })
 }
 
-date <- "20230626"
+date <- "20230918" #"20230626" # the 20230626 version has sigma_eta = 0.7, the 20230918 version has sigma_eta = sqrt(0.1)
+# date <- "20230626"
 
 ## R-VGA flags
-regenerate_data <- T
+regenerate_data <- F
 save_data <- F
 use_tempering <- T
-reorder_freq <- F
+reorder_freq <- T
 decreasing <- T
 reorder_seed <- 2024
+plot_likelihood_surface <- F
+prior_type <- "prior1"
 
 ## Flags
 rerun_rvgaw <- T
-rerun_mcmcw <- F
+rerun_mcmcw <- T
 # rerun_mcmce <- F
-rerun_hmc <- F
+rerun_hmc <- T
 
 save_rvgaw_results <- T
-save_mcmcw_results <- F
+save_mcmcw_results <- T
 # save_mcmce_results <- F
-save_hmc_results <- F
+save_hmc_results <- T
+
+## Result directory
+result_directory <- paste0("./results/", prior_type, "/")
+
 
 ## Generate data
 mu <- 0
-phi <- 0.95
-sigma_eta <- 0.8
+phi <- 0.9
+sigma_eta <- sqrt(0.1)
 sigma_eps <- 1
 kappa <- 2
 x1 <- rnorm(1, mu, sigma_eta^2 / (1 - phi^2))
@@ -112,18 +117,33 @@ if (regenerate_data) {
 # plot(x, type = "l")
 
 ## Test likelihood computation
-phi_grid <- seq(0.01, 0.99, length.out = 100)
-llh <- c()
-
-for (k in 1:length(phi_grid)) {
-  params <- list(phi = phi_grid[k], sigma_eta = sigma_eta, sigma_xi = sqrt(pi^2/2))
-  llh[k] <- compute_whittle_likelihood_sv(y = y, params = params)
+if (plot_likelihood_surface) {
+  param_grid <- seq(0.01, 0.99, length.out = 100)
+  llh1 <- c() # log likelihood when varying phi
+  llh2 <- c() # log likelihood when varying sigma_eta
+  
+  for (k in 1:length(param_grid)) {
+    params1 <- list(phi = param_grid[k], sigma_eta = sigma_eta, sigma_xi = sqrt(pi^2/2))
+    params2 <- list(phi = phi, sigma_eta = param_grid[k], sigma_xi = sqrt(pi^2/2))
+    
+    llh1[k] <- compute_whittle_likelihood_sv(y = y, params = params1)
+    llh2[k] <- compute_whittle_likelihood_sv(y = y, params = params2)
+    
+  }
+  
+  par(mfrow = c(1,2))
+  plot_range <- 1:100
+  plot(param_grid[plot_range], llh1[plot_range], type = "l", 
+       xlab = "Parameter", ylab = "Log likelihood", main = "phi")
+  abline(v = phi, lty = 2)
+  abline(v = param_grid[which.max(llh1)], col = "red", lty = 2)
+  
+  plot_range <- 1:100
+  plot(param_grid[plot_range], llh2[plot_range], type = "l", 
+       xlab = "Parameter", ylab = "Log likelihood", main = "sigma_eta")
+  abline(v = sigma_eta, lty = 2)
+  abline(v = param_grid[which.max(llh2)], col = "red", lty = 2)
 }
-
-plot_range <- 80:100
-plot(phi_grid[plot_range], llh[plot_range], type = "l")
-abline(v = phi, lty = 2)
-abline(v = phi_grid[which.max(llh)], col = "red", lty = 2)
 # 
 # test_eps <- rnorm(10000, 0, 1)
 # test_xi <- log(test_eps^2)
@@ -170,17 +190,16 @@ rvgaw_filepath <- paste0(result_directory, "rvga_whittle_results_n", n,
                          "_phi", phi_string, temper_info, reorder_info, "_", date, ".rds")
 
 ## Prior
-prior_mean <- rep(0, 2) #c(atanh(phi), log(sigma_eta^2), log(pi^2/2)) #rep(0, 3)
-prior_var <- diag(1, 2)
+prior_mean <- c(0, -1) #rep(0,2)
+prior_var <- diag(c(1, 0.1)) #diag(1, 2)
 
 prior_theta <- rmvnorm(10000, prior_mean, prior_var)
 prior_phi <- tanh(prior_theta[, 1])
 prior_eta <- sqrt(exp(prior_theta[, 2]))
 # prior_xi <- sqrt(exp(prior_theta[, 3]))
-par(mfrow = c(3,1))
-hist(prior_phi)
-hist(prior_eta)
-# hist(prior_xi)
+# par(mfrow = c(2,1))
+# hist(prior_phi)
+# hist(prior_eta)
 
 if (rerun_rvgaw) {
   rvgaw_results <- run_rvgaw_sv(y = y, #sigma_eta = sigma_eta, sigma_eps = sigma_eps, 
@@ -243,25 +262,25 @@ mcmcw.post_samples_phi <- as.mcmc(mcmcw_results$post_samples$phi[-(1:burn_in)])
 mcmcw.post_samples_eta <- as.mcmc(mcmcw_results$post_samples$sigma_eta[-(1:burn_in)])
 # mcmcw.post_samples_xi <- as.mcmc(mcmcw_results$post_samples$sigma_xi[-(1:burn_in)])
 
-par(mfrow = c(2,1))
-coda::traceplot(mcmcw.post_samples_phi, main = "Trace plot for phi")
-coda::traceplot(mcmcw.post_samples_eta, main = "Trace plot for sigma_eta")
-# traceplot(mcmcw.post_samples_xi, main = "Trace plot for sigma_xi")
-
-par(mfrow = c(1,2))
-plot(density(mcmcw.post_samples_phi), main = "Posterior of phi", 
-     col = "blue", lty = 2, lwd = 1.5)
-lines(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 1.5)
-abline(v = phi, lty = 3)
-legend("topleft", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
-       col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
-
-plot(density(mcmcw.post_samples_eta), main = "Posterior of sigma_eta", 
-     col = "blue", lty = 2, lwd = 1.5)
-lines(density(rvgaw.post_samples_eta), col = "red", lty = 2, lwd = 1.5)
-abline(v = sigma_eta, lty = 3)
-legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
-       col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
+# par(mfrow = c(2,1))
+# coda::traceplot(mcmcw.post_samples_phi, main = "Trace plot for phi")
+# coda::traceplot(mcmcw.post_samples_eta, main = "Trace plot for sigma_eta")
+# # traceplot(mcmcw.post_samples_xi, main = "Trace plot for sigma_xi")
+# 
+# par(mfrow = c(1,2))
+# plot(density(mcmcw.post_samples_phi), main = "Posterior of phi", 
+#      col = "blue", lty = 2, lwd = 1.5)
+# lines(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 1.5)
+# abline(v = phi, lty = 3)
+# legend("topleft", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
+#        col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
+# 
+# plot(density(mcmcw.post_samples_eta), main = "Posterior of sigma_eta", 
+#      col = "blue", lty = 2, lwd = 1.5)
+# lines(density(rvgaw.post_samples_eta), col = "red", lty = 2, lwd = 1.5)
+# abline(v = sigma_eta, lty = 3)
+# legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
+#        col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
 
 # ####### MCMCE ##########
 # mcmce_filepath <- paste0(result_directory, "mcmc_exact_results_n", n, 

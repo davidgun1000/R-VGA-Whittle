@@ -50,15 +50,15 @@ date <- "20230814"
 regenerate_data <- F
 save_data <- F
 use_cholesky <- F # use lower Cholesky factor to parameterise Sigma_eta
-prior_type <- "minnesota"
+prior_type <- "normal"
 
-rerun_rvgaw <- T
-rerun_mcmcw <- T
-rerun_hmc <- T
+rerun_rvgaw <- F
+rerun_mcmcw <- F
+rerun_hmc <- F
 
-save_rvgaw_results <- T
-save_mcmcw_results <- T
-save_hmc_results <- T
+save_rvgaw_results <- F
+save_mcmcw_results <- F
+save_hmc_results <- F
 
 ## R-VGA flags 
 use_tempering <- T
@@ -66,7 +66,7 @@ reorder_freq <- T
 decreasing <- T
 
 ## Plot options
-plot_trace <- T
+plot_trace <- F
 
 ## MCMC options
 n_post_samples <- 5000
@@ -76,7 +76,7 @@ iters <- n_post_samples + burn_in
 ##   Generate data   ##
 #######################
 
-dataset <- "4"
+dataset <- "2"
 
 Tfin <- 1000
 d <- 3
@@ -162,7 +162,7 @@ param_dim <- length(prior_mean)
 if (prior_type == "minnesota") {
   prior_type <- ""
 } else {
-  prior_type <- paste("_", prior_type)
+  prior_type <- paste0("_", prior_type)
 }
 
 

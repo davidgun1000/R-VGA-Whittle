@@ -5,6 +5,10 @@ functions {
     spec_dens = sigma_eta^2 / (1 + phi^2 - 2 * phi * cos(freq)) + pi()^2/2;
     return spec_dens;
   }
+  
+  // real unit_normal_lpdf(real y) {
+  //   return normal_lpdf(y | 0, 1);
+  // }
 }
 
 data {
@@ -34,7 +38,8 @@ transformed parameters {
 model {
   vector[nfreq] spec_dens_inv;
   
-  theta_phi ~ normal(0, 1);
+  // theta_phi ~ unit_normal();
+  theta_phi ~ normal(0, sqrt(sigma_eta^2/(1 - phi^2)));
   theta_sigma ~ normal(0, 1);
 
   for (k in 1:nfreq) {

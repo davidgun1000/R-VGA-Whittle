@@ -13,7 +13,7 @@ construct_prior <- function(data, use_cholesky = F, byrow = T) {
   }
   
   # Prior mean
-  prior_mean <- rep(0, param_dim)
+  prior_mean <- c(rep(0, m^2), rep(-1, m))
   
   # Prior var for the AR parameters -- use Minnesota prior
   sigma2_estimates <- c()
@@ -42,7 +42,7 @@ construct_prior <- function(data, use_cholesky = F, byrow = T) {
     j <- indices[k, 2]
     
     if (i == j) {
-      diag_var_A[k] <- 1
+      diag_var_A[k] <- (lambda_0/l)^2
     } else {
       diag_var_A[k] <- (lambda_0 * theta_0 / l)^2 * 
         (sigma2_estimates[i] / sigma2_estimates[j])    
@@ -54,7 +54,7 @@ construct_prior <- function(data, use_cholesky = F, byrow = T) {
     ## N(0, 0.1) prior for the lower Cholesky factor
     diag_var_Sigma <- rep(0.1, m*(m-1)/2 + m)
   } else {
-    diag_var_Sigma <- rep(0.01, m)
+    diag_var_Sigma <- rep(0.1, m)
   }
   
   ## now put the prior of Phi and L together so that

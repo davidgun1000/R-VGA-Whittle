@@ -47,14 +47,16 @@ date <- "20230525"
 regenerate_data <- T
 save_data <- F
 
-rerun_rvgaw <- T
-rerun_mcmcw <- T
+rerun_rvgaw <- F
+rerun_mcmcw <- F
 # rerun_mcmce <- F
-rerun_hmc <- T
+rerun_hmc <- F
 save_rvgaw_results <- F
 save_mcmcw_results <- F
 # save_mcmce_results <- F
 save_hmc_results <- F
+
+plot_trajectory <- F
 
 ## R-VGA flags
 use_tempering <- T
@@ -68,7 +70,7 @@ adapt_proposal <- T
 ## True parameters
 sigma_eps <- 0.5 # measurement error var
 sigma_eta <- 0.7 # process error var
-phi <- 0.8
+phi <- 0.9
 
 ## For the result filename
 phi_string <- sub("(\\d+)\\.(\\d+)", "\\1\\2", toString(phi)) ## removes decimal point fron the number
@@ -356,16 +358,17 @@ plot_range <- 1:length(mu_phi) #400:1000#floor(n/2)
 #   plot_title <- c("Trajectories with original order of frequencies")
 # }
 
-
-par(mfrow = c(1,3))
-plot(mu_phi[plot_range], type = "l",
-     ylab = "phi", xlab = "Iterations", main = "Trajectory of phi")
-abline(h = phi, lty = 2)
-
-plot(mu_sigma_eta[plot_range], type = "l",
-     ylab = "sigma_eta", xlab = "Iterations", main = "Trajectory of sigma_eta")
-abline(h = sigma_eta, lty = 2)
-
-plot(mu_sigma_eps[plot_range], type = "l",
-     ylab = "sigma_eps", xlab = "Iterations", main = "Trajectory of sigma_eps")
-abline(h = sigma_eps, lty = 2)
+if (plot_trajectory) {
+  par(mfrow = c(1,3))
+  plot(mu_phi[plot_range], type = "l",
+       ylab = "phi", xlab = "Iterations", main = "Trajectory of phi")
+  abline(h = phi, lty = 2)
+  
+  plot(mu_sigma_eta[plot_range], type = "l",
+       ylab = "sigma_eta", xlab = "Iterations", main = "Trajectory of sigma_eta")
+  abline(h = sigma_eta, lty = 2)
+  
+  plot(mu_sigma_eps[plot_range], type = "l",
+       ylab = "sigma_eps", xlab = "Iterations", main = "Trajectory of sigma_eps")
+  abline(h = sigma_eps, lty = 2)
+}

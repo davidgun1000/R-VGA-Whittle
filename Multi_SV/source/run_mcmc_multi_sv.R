@@ -39,7 +39,8 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
   I <- fft_out$fxx
   
   ## Initial values: sample params from prior
-  theta_curr <- rmvnorm(1, prior_mean, prior_var)
+  # theta_curr <- rmvnorm(1, prior_mean, prior_var)
+  theta_curr <- c(0.5, 0.3, 0.4, 0.6, 0.6, 0.3) # true values
   
   ### the first 4 elements will be used to construct A
   A_curr <- matrix(theta_curr[1:(d^2)], d, d, byrow = T)
@@ -59,9 +60,10 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
   
   ## 4. Calculate the initial log likelihood
   if (use_whittle_likelihood) {
-    log_likelihood_curr <- compute_whittle_likelihood_multi_sv(Y = Y, fourier_freqs = freq,
+    log_likelihood_curr <- compute_whittle_likelihood_multi_sv(Y = Z, fourier_freqs = freq,
                                                                periodogram = I, 
-                                                               params = params_curr)$log_likelihood
+                                                               params = params_curr,
+                                                               use_tensorflow = T)$log_likelihood
   } else { 
     # nothing here yet
   }
@@ -85,6 +87,7 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
       # cat("Current params:", unlist(params_curr), "\n")
       # cat("------------------------------------------------------------------\n")
     }
+    # cat("Current param: phi_11 = ", unlist(params_curr)[1], "\n")
     
     ## 1. Propose new parameter values
     theta_prop <- rmvnorm(1, theta_curr, D)
@@ -108,9 +111,10 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
     
     ## 2. Calculate likelihood
     if (use_whittle_likelihood) {
-      log_likelihood_prop <- compute_whittle_likelihood_multi_sv(Y = Y, fourier_freqs = freq,
+      log_likelihood_prop <- compute_whittle_likelihood_multi_sv(Y = Z, fourier_freqs = freq,
                                                                  periodogram = I,
-                                                                 params = params_prop)$log_likelihood
+                                                                 params = params_prop,
+                                                                 use_tensorflow = T)$log_likelihood
     } else { 
       # nothing here yet
     }

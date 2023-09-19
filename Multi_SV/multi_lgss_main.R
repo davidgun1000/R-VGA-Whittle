@@ -15,23 +15,23 @@ library("stcos")
 # phi21 <- 0.2
 # phi22 <- 0.7
 
-phi11 <- 0.8
-phi12 <- 0.05
-phi21 <- 0.2
-phi22 <- 0.9
+phi11 <- 0.5 #0.9
+phi12 <- 0.3 #0.1 # dataset1: 0.1, dataset2 : -0.5
+phi21 <- 0.4 #0.2 # dataset1: 0.2, dataset2 : -0.1
+phi22 <- 0.6 #0.7
 
 Phi <- matrix(c(phi11, phi12, phi21, phi22), 2, 2, byrow = T)
 
-sigma_eta1 <- 0.2
-sigma_eta2 <- 0.6
+sigma_eta1 <- 0.6
+sigma_eta2 <- 0.3
 Sigma_eta <- diag(c(sigma_eta1, sigma_eta2))
 
-sigma_eps1 <- 0.01
-sigma_eps2 <- 0.02
+sigma_eps1 <- 1
+sigma_eps2 <- 1
 
 Sigma_eps <- diag(c(sigma_eps1, sigma_eps2))
 
-Tfin <- 1000
+Tfin <- 10000
 x1 <- c(0, 0)
 X <- matrix(NA, nrow = length(x1), ncol = Tfin+1) # x_0:T
 X[, 1] <- x1
@@ -157,7 +157,7 @@ L[2,1] <- samples[7]
 Sigma_eta_sample <- L %*% t(L)
 
 ## 3. Map (A, Sigma_eta) to (Phi, Sigma_eta) using the mapping in Ansley and Kohn (1986)
-Phi_sample <- backward_mahp(A_sample, Sigma_eta_sample)
+Phi_sample <- backward_map(A_sample, Sigma_eta_sample)
 
 ## 4. Calculate the likelihood
 llh <- compute_whittle_likelihood_multi_lgss(Y = Y, 

@@ -147,7 +147,6 @@ transformed parameters { // define the mapping from A to Phi here
 model {
   //to_vector(A) ~ multi_normal(prior_mean_A, prior_var_A);
   //gamma ~ multi_normal(prior_mean_gamma, prior_var_gamma);
-  
   to_vector(A) ~ normal(prior_mean_A, sqrt(diag_prior_var_A));
   gamma ~ normal(prior_mean_gamma, sqrt(diag_prior_var_gamma));
   

@@ -3,6 +3,7 @@
 setwd("~/R-VGA-Whittle/SV")
 
 library("rstan")
+library(cmdstanr)
 
 source("./source/run_hmc_sv.R")
 
@@ -18,7 +19,7 @@ sigma_eta <- 0.7
 sigma_eps <- 1
 kappa <- 2
 x1 <- rnorm(1, mu, sigma_eta^2 / (1 - phi^2))
-n <- 10000
+n <- 1000
 
 ## For the result filename
 phi_string <- sub("(\\d+)\\.(\\d+)", "\\1\\2", toString(phi)) ## removes decimal point fron the number
@@ -56,51 +57,9 @@ if (regenerate_data) {
 }
 
 ### STAN ###
-n_post_samples <- 10000
+n_post_samples <- 5000
 burn_in <- 1000
 stan.iters <- n_post_samples + burn_in
-
-# sv_code <- '
-#     data {
-#       int<lower=0> Tfin;   // # time points (equally spaced)
-#       vector[Tfin] y;      // log-squared, mean-removed series
-#       real kappa;
-#     }
-#     parameters {
-#       //real mu;                     // mean log volatility
-#       //real<lower=-1,upper=1> phi;  // persistence of volatility
-#       //real<lower=0> sigma;         // white noise shock scale
-#       
-#       real theta_phi;
-#       real theta_sigma;
-#       vector[Tfin] x;                 // log volatility at time t
-#     }
-#     model {
-#       //phi ~ uniform(-1, 1);
-#       //sigma ~ cauchy(0, 5);
-#       //mu ~ cauchy(0, 10);
-#       
-#       theta_phi ~ normal(0, 1);
-#       theta_sigma ~ normal(0, 1);
-#       
-#       x[1] ~ normal(0, sqrt(exp(theta_sigma) / (1 - (tanh(theta_phi)^2))));
-#       for (t in 2:Tfin)
-#         x[t] ~ normal(tanh(theta_phi) * x[t - 1], sqrt(exp(theta_sigma)));
-#       for (t in 1:Tfin)
-#         y[t] ~ normal(0, kappa * exp(x[t]/2));
-#     }
-#   '
-# 
-# log_kappa2_est <- mean(log(y^2)) - (digamma(1/2) + log(2))
-#
-# sv_data <- list(Tfin = length(y), y = y,
-#                 kappa = sqrt(exp(log_kappa2_est)))
-#
-# hfit <- stan(model_code = sv_code,
-#              model_name="sv", data = sv_data,
-#              iter = iters, warmup = burn_in, chains=1)
-# hmc.fit <- extract(hfit, pars = c("theta_phi", "theta_sigma"),
-#                    permuted = F)
 
 hmc_results <- run_hmc_sv(data = y, iters = stan.iters, burn_in = burn_in)
 
@@ -133,6 +92,7 @@ periodogram <- 1/n * Mod(fourier_transf)^2
 I <- periodogram[k_in_likelihood + 1]
 
 whittle_stan_file <- "./source/stan_sv_whittle.stan"
+# whittle_stan_file <- "./source/stan_mwe.stan" # this was to test the use of complex numbers
 
 whittle_sv_model <- cmdstan_model(
   whittle_stan_file,
@@ -172,6 +132,7 @@ par(mfrow = c(1,2))
 plot(density(hmc.phi), main = "Posterior of phi")
 lines(density(hmcw.phi), col = "red")
 abline(v = phi, lty = 2)
+legend("bottomright", legend = c("HMC", "HMCW"), col = c("black", "red"), lty = 1)
 
 plot(density(hmc.sigma_eta), main = "Posterior of sigma_eta")
 lines(density(hmcw.sigma_eta), col = "red")

@@ -168,8 +168,12 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
       
       prec_temp <- prec_temp - a * E_hessian
       
-      if(any(eigen(prec_temp)$value < 0)) {
-        browser()
+      eigvals <- eigen(prec_temp)$value
+      if(any(eigvals < 0)) {
+        # browser() ## try nearPD() funciton from the Matrix package here
+        neg_eigval <- eigvals[eigvals < 0]
+        cat("Warning: precision matrix has negative eigenvalue", neg_eigval, "\n")
+        prec_temp <- as.matrix(nearPD(prec_temp)$mat)
       }
       
       mu_temp <- mu_temp + chol2inv(chol(prec_temp)) %*% (a * E_grad)

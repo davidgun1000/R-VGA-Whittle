@@ -13,6 +13,7 @@ library("stcos")
 library(tensorflow)
 reticulate::use_condaenv("tf2.11", required = TRUE)
 library(keras)
+library(Matrix)
 
 source("./source/run_rvgaw_multi_sv.R")
 source("./source/run_mcmc_multi_sv.R")
@@ -49,9 +50,11 @@ result_directory <- "./results/"
 ## Flags
 date <- "20230814"
 regenerate_data <- T
-save_data <- T
+save_data <- F
 use_cholesky <- F # use lower Cholesky factor to parameterise Sigma_eta
-prior_type <- "_normal"
+prior_type <- "minnesota"
+use_heaps_mapping <- F
+plot_likelihood_surface <- T
 
 rerun_rvgaw <- T
 rerun_mcmcw <- T
@@ -70,14 +73,14 @@ decreasing <- T
 ##   Generate data   ##
 #######################
 
-dataset <- "2" 
+dataset <- "5" 
 
 Tfin <- 1000
 if (regenerate_data) {
   
-  sigma_eta1 <- 0.9#4
-  sigma_eta2 <- 1.2 #1.5
-  Sigma_eta <- diag(c(sigma_eta1, sigma_eta2))
+  sigma_eta1 <- sqrt(0.2)#0.1
+  sigma_eta2 <- sqrt(0.1) #0.05
+  Sigma_eta <- diag(c(sigma_eta1^2, sigma_eta2^2))
   
   sigma_eps1 <- 1 #0.01
   sigma_eps2 <- 1 #0.02
@@ -85,18 +88,24 @@ if (regenerate_data) {
   Sigma_eps <- diag(c(sigma_eps1, sigma_eps2))
   
   if (dataset == "0") {
-    Phi <- diag(c(phi11, phi22))  
+    Phi <- diag(c(0.9, 0.9))  
   } else if (dataset == "2") {
     Phi <- matrix(c(-0.7, 0.4, 0.9, 0.7), 2, 2, byrow = T)
   } else if (dataset == "3") {
-    phi11 <- 0.5 #0.9
+    phi11 <- 0.9 #0.9
     phi12 <- 0.3 #0.1 # dataset1: 0.1, dataset2 : -0.5
-    phi21 <- 0.3 #0.2 # dataset1: 0.2, dataset2 : -0.1
-    phi22 <- 0.6 #0.7
+    phi21 <- 0#.4 #0.2 # dataset1: 0.2, dataset2 : -0.1
+    phi22 <- 0.9 #0.7
     Phi <- matrix(c(phi11, phi12, phi21, phi22), 2, 2, byrow = T)
   } else if (dataset == "4") {
     Phi <- matrix(c(-0.9, 0.8, -0.2, -0.4), 2, 2, byrow = T)
-  } 
+  } else if (dataset == "5") {
+    Phi <- diag(c(0.9, 0.9)) 
+  
+    Sigma_eta[1,2] <- 0.05
+    Sigma_eta[2,1] <- 0.05
+    
+  }
   
   else { # generate a random Phi matrix
     d <- 2
@@ -111,7 +120,7 @@ if (regenerate_data) {
   X[, 1] <- x1
   Y <- matrix(NA, nrow = length(x1), ncol = Tfin) # y_1:T
   # Y[, 1] <- V %*% t(rmvnorm(1, c(0, 0), Sigma_eps))
-  set.seed(2022)
+  set.seed(2023)
   for (t in 1:Tfin) {
     X[, t+1] <- Phi %*% X[, t] + t(rmvnorm(1, c(0, 0), Sigma_eta))
     V <- diag(exp(X[, t+1]/2))
@@ -141,6 +150,11 @@ plot(X[2, ], type = "l")
 plot(Y[1, ], type = "l")
 plot(Y[2, ], type = "l")
 
+browser()
+
+# par(mfrow = c(1,2))
+# hist(Y[1,])
+# hist(Y[2,])
 ############################## Inference #######################################
 
 ## Construct initial distribution/prior
@@ -149,6 +163,167 @@ prior_mean <- prior$prior_mean
 prior_var <- prior$prior_var
 
 param_dim <- length(prior_mean)
+
+## Sample from the priors here
+# prior_samples <- data.frame(rmvnorm(1000, prior_mean, prior_var))
+# names(prior_samples) <- c("phi_11", "phi_12", "phi_21", "phi_22", "sigma_eta1", "sigma_eta2")
+prior_samples <- rmvnorm(1000, prior_mean, prior_var)
+
+d <- nrow(Phi)
+indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
+
+### the first 4 elements will be used to construct A
+prior_samples_list <- lapply(seq_len(nrow(prior_samples)), function(i) prior_samples[i,])
+
+A_prior_samples <- lapply(prior_samples_list, function(x) matrix(x[1:(d^2)], d, d, byrow = T))
+
+### the last 3 will be used to construct L
+construct_Sigma_eta <- function(theta) {
+  L <- diag(exp(theta[(d^2+1):param_dim]))
+  # L[2,1] <- theta[7]
+  # Sigma_eta <- L %*% t(L)
+  Sigma_eta <- L
+  return(Sigma_eta)
+}
+
+Sigma_eta_prior_samples <- lapply(prior_samples_list, construct_Sigma_eta)
+
+## Transform samples of A into samples of Phi via the mapping in Ansley and Kohn (1986)
+Phi_prior_samples <- mapply(backward_map, A_prior_samples, Sigma_eta_prior_samples, SIMPLIFY = F)
+
+VAR1_prior_samples <- list()
+for (k in 1:nrow(indices)) {
+  i <- indices[k, 1]
+  j <- indices[k, 2]
+  VAR1_prior_samples[[k]] <- unlist(lapply(Phi_prior_samples, function(X) X[i, j]))
+}
+
+for (k in 1:d) {
+  VAR1_prior_samples[[k + d^2]] <- unlist(lapply(Sigma_eta_prior_samples, function(X) X[k, k]))
+}
+
+par(mfrow = c(6, 6))
+true_params <- c(t(Phi), diag(Sigma_eta))
+param_names <- c("phi_11", "phi_12", "phi_21", "phi_22", "sigma_eta1", "sigma_eta2")
+for (i in 1:6) {
+  for (j in 1:6) {
+    par("mar"=c(4, 4, 2, 2))
+    plot(VAR1_prior_samples[[i]], VAR1_prior_samples[[j]], 
+         xlab = param_names[i], ylab = param_names[j])
+    points(true_params[i], true_params[j], col = "red", pch = 20)
+  }
+}
+
+if (prior_type == "minnesota") {
+  prior_type = ""
+} else {
+  prior_type = paste0("_", prior_type)
+}
+
+## Plot likelihood surface here
+if (plot_likelihood_surface) {
+  print("Plotting likelihood surface...")
+  phi_grid <- seq(-0.99, 0.99, length.out = 100)
+  sigma_eta_grid <- seq(0.01, 0.99, length.out = 100)
+  sigma_eta_grid_offdiag <- seq(0.01, 0.2, length.out = 100)
+  
+  
+  k <- seq(-ceiling(Tfin/2)+1, floor(Tfin/2), 1)
+  k_in_likelihood <- k [k >= 1 & k <= floor((Tfin-1)/2)]
+  freq <- 2 * pi * k_in_likelihood / Tfin
+  
+  # ## astsa package
+  Z <- log(Y^2) - rowMeans(log(Y^2))
+  fft_out <- mvspec(t(Z), detrend = F, plot = F)
+  # fft_out <- mvspec(t(X), detrend = F, plot = F)
+  I_all <- fft_out$fxx
+  
+  # params <- c(t(Phi), diag(Sigma_eta))
+  
+  llhs <- list()
+  d <- nrow(Phi)
+  indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
+  
+  par(mfrow = c(4,2))
+  for (r in 1:nrow(indices)) {
+    i <- indices[r, 1]
+    j <- indices[r, 2]
+    
+    llh <- c()
+    for (q in 1:length(phi_grid)) {
+      # Sigma_eta_q <- Sigma_eta
+      # Sigma_eta_q[i,j] <- param_grid[q]
+      Phi_q <- Phi
+      Phi_q[i,j] <- phi_grid[q]
+      llh[q] <- compute_whittle_likelihood_multi_sv(Y = Z, fourier_freqs = freq,
+                                                    periodogram = I_all,
+                                                    params = list(Phi = Phi_q, Sigma_eta = Sigma_eta),
+                                                    use_tensorflow = T)$log_likelihood
+    }
+    
+    llhs[[r]] <- llh
+    
+    param_index <- paste0(i,j)
+    plot(phi_grid, llhs[[r]], type = "l", main = bquote(phi[.(param_index)]), 
+         ylab = "Log likelihood", xlab = "Parameter")
+    abline(v = Phi[i,j], lty = 2)
+    abline(v = phi_grid[which.max(llh)], col = "red", lty = 2)
+    legend("bottomright", legend = c("True param", "arg max (llh)"), col = c("black", "red"), lty = 2)
+  }
+  
+  for (r in 1:nrow(indices)) {
+    i <- indices[r, 1]
+    j <- indices[r, 2]
+    llh <- c()
+    for (q in 1:length(sigma_eta_grid)) {
+      Sigma_eta_q <- Sigma_eta
+      
+      if (i == j) {
+        Sigma_eta_q[i,j] <- sigma_eta_grid[q]
+      } else {
+        Sigma_eta_q[i,j] <- Sigma_eta_q[j,i] <- sigma_eta_grid_offdiag[q]
+      }
+      
+      # Phi_q <- Phi
+      # Phi_q[i,j] <- param_grid[j]
+      llh[q] <- compute_whittle_likelihood_multi_sv(Y = Z, fourier_freqs = freq,
+                                                      periodogram = I_all,
+                                                      params = list(Phi = Phi, Sigma_eta = Sigma_eta_q),
+                                                      use_tensorflow = F)$log_likelihood
+      
+    }
+    
+    llhs[[r+d^2]] <- llh
+    
+    param_index <- paste0(i,j)
+    if(i == j) {
+      plot(sigma_eta_grid, llhs[[r+d^2]], type = "l", 
+           # main = expression(sigma_eta[])
+           main = bquote(sigma_eta[.(param_index)]),
+           ylab = "Log likelihood", xlab = "Parameter")
+      abline(v = (Sigma_eta[i,j]), lty = 2)
+      abline(v = sigma_eta_grid[which.max(llh)], col = "red", lty = 2)
+      legend("bottomleft", legend = c("True param", "arg max (llh)"), col = c("black", "red"), lty = 2)
+    } else {
+      plot(sigma_eta_grid_offdiag, llhs[[r+d^2]], type = "l", 
+           # main = expression(sigma_eta[])
+           main = bquote(sigma_eta[.(param_index)]),
+           ylab = "Log likelihood", xlab = "Parameter")
+      abline(v = (Sigma_eta[i,j]), lty = 2)
+      abline(v = sigma_eta_grid_offdiag[which.max(llh)], col = "red", lty = 2)
+      legend("bottomleft", legend = c("True param", "arg max (llh)"), col = c("black", "red"), lty = 2)
+      
+    }
+    
+  }
+  # par(mfrow = c(1,1))
+  # plot(param_grid, llh, type = "l", main = "sigma_eta_22", ylab = "Log likelihood", xlab = "Parameter")
+  # abline(v = Sigma_eta[2,2], lty = 2)
+  # abline(v = param_grid[which.max(llh)], col = "red", lty = 2)
+  # legend("topright", legend = c("True param", "arg max (llh)"), col = c("black", "red"), lty = 2)
+  browser()
+}
+
 
 # ## Test run MCMC on a single series here ##
 # n_post_samples <- 10000
@@ -165,7 +340,7 @@ param_dim <- length(prior_mean)
 # mcmcw1.post_samples_sigma_eta2 <- as.mcmc(mcmcw1_results$post_samples$sigma_eta[-(1:burn_in)]^2)
 # mcmcw.post_samples_xi <- as.mcmc(mcmcw_results$post_samples$sigma_xi[-(1:burn_in)])
 
-################################
+####?############################
 ##    R-VGAW implementation   ##
 ################################
 
@@ -216,12 +391,12 @@ rvgaw.post_samples_phi_12 <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x
 rvgaw.post_samples_phi_21 <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[2,1]))
 rvgaw.post_samples_phi_22 <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[2,2]))
 
-rvgaw.post_samples_sigma_eta_11 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[1,1]))
-rvgaw.post_samples_sigma_eta_22 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[2,2]))
+rvgaw.post_samples_sigma_eta_11 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) sqrt(x[1,1])))
+rvgaw.post_samples_sigma_eta_22 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) sqrt(x[2,2])))
 
 if (use_cholesky) {
-  rvgaw.post_samples_sigma_eta_12 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[1,2]))
-  rvgaw.post_samples_sigma_eta_21 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[2,1]))
+  rvgaw.post_samples_sigma_eta_12 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) sqrt(x[1,2])))
+  rvgaw.post_samples_sigma_eta_21 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) sqrt(x[2,1])))
 }
 
 par(mfrow = c(2,2))
@@ -235,17 +410,17 @@ plot(density(rvgaw.post_samples_phi_22), col = "blue", main = "phi_22")
 abline(v = Phi[2,2], lty = 2)
 
 plot(density(rvgaw.post_samples_sigma_eta_11), col = "blue", main = "sigma_eta_11")
-abline(v = Sigma_eta[1,1], lty = 2)
+abline(v = sqrt(Sigma_eta[1,1]), lty = 2)
 
 if (use_cholesky) {
   plot(density(rvgaw.post_samples_sigma_eta_12), col = "blue", main = "sigma_eta_12")
-  abline(v = Sigma_eta[1,2], lty = 2)
+  abline(v = sqrt(Sigma_eta[1,2]), lty = 2)
   plot(density(rvgaw.post_samples_sigma_eta_21), col = "blue", main = "sigma_eta_21")
-  abline(v = Sigma_eta[2,1], lty = 2)
+  abline(v = sqrt(Sigma_eta[2,1]), lty = 2)
 }
 
 plot(density(rvgaw.post_samples_sigma_eta_22), col = "blue", main = "sigma_eta_22")
-abline(v = Sigma_eta[2,2], lty = 2)
+abline(v = sqrt(Sigma_eta[2,2]), lty = 2)
 
 #############################
 ##   MCMC implementation   ##
@@ -284,10 +459,10 @@ mcmcw.post_samples_phi_12 <- as.mcmc(unlist(mcmcw.post_samples_phi_12[-(1:burn_i
 mcmcw.post_samples_phi_21 <- as.mcmc(unlist(mcmcw.post_samples_phi_21[-(1:burn_in)]))
 mcmcw.post_samples_phi_22 <- as.mcmc(unlist(mcmcw.post_samples_phi_22[-(1:burn_in)]))
 
-mcmcw.post_samples_sigma_eta_11 <- lapply(mcmcw.post_samples_sigma_eta, function(x) x[1,1])
-mcmcw.post_samples_sigma_eta_12 <- lapply(mcmcw.post_samples_sigma_eta, function(x) x[1,2])
-mcmcw.post_samples_sigma_eta_21 <- lapply(mcmcw.post_samples_sigma_eta, function(x) x[2,1])
-mcmcw.post_samples_sigma_eta_22 <- lapply(mcmcw.post_samples_sigma_eta, function(x) x[2,2])
+mcmcw.post_samples_sigma_eta_11 <- lapply(mcmcw.post_samples_sigma_eta, function(x) sqrt(x[1,1]))
+mcmcw.post_samples_sigma_eta_12 <- lapply(mcmcw.post_samples_sigma_eta, function(x) sqrt(x[1,2]))
+mcmcw.post_samples_sigma_eta_21 <- lapply(mcmcw.post_samples_sigma_eta, function(x) sqrt(x[2,1]))
+mcmcw.post_samples_sigma_eta_22 <- lapply(mcmcw.post_samples_sigma_eta, function(x) sqrt(x[2,2]))
 
 mcmcw.post_samples_sigma_eta_11 <- as.mcmc(unlist(mcmcw.post_samples_sigma_eta_11[-(1:burn_in)]))
 mcmcw.post_samples_sigma_eta_12 <- as.mcmc(unlist(mcmcw.post_samples_sigma_eta_12[-(1:burn_in)]))
@@ -306,16 +481,16 @@ coda::traceplot(mcmcw.post_samples_phi_22, main = "Trace plot for phi_22")
 abline(h = Phi[2,2], col = "red", lty = 2)
 
 coda::traceplot(mcmcw.post_samples_sigma_eta_11, main = "Trace plot for sigma_eta_11")
-abline(h = Sigma_eta[1,1], col = "red", lty = 2)
+abline(h = sqrt(Sigma_eta[1,1]), col = "red", lty = 2)
 
 if (use_cholesky) {
   coda::traceplot(mcmcw.post_samples_sigma_eta_12, main = "Trace plot for sigma_eta_12")
-  abline(h = Sigma_eta[1,2], col = "red", lty = 2)
+  abline(h = sqrt(Sigma_eta[1,2]), col = "red", lty = 2)
   coda::traceplot(mcmcw.post_samples_sigma_eta_21, main = "Trace plot for sigma_eta_21")
-  abline(h = Sigma_eta[2,1], col = "red", lty = 2)
+  abline(h = sqrt(Sigma_eta[2,1]), col = "red", lty = 2)
 }
 coda::traceplot(mcmcw.post_samples_sigma_eta_22, main = "Trace plot for sigma_eta_22")
-abline(h = Sigma_eta[2,2], col = "red", lty = 2)
+abline(h = sqrt(Sigma_eta[2,2]), col = "red", lty = 2)
 
 ########################
 ###       STAN       ###
@@ -332,23 +507,24 @@ if (rerun_hmc) {
   burn_in <- 1000
   stan.iters <- n_post_samples + burn_in
   
-  stan_file <- "./source/stan_multi_sv.stan"
+  if (use_heaps_mapping) {
+    stan_file <- "./source/stan_multi_sv_heaps.stan"
+    multi_sv_data <- list(d = nrow(Y), p = 1, Tfin = ncol(Y), Y = Y,
+                          prior_mean_A = prior_mean[c(1,3,2,4)], diag_prior_var_A = diag(prior_var)[c(1,3,2,4)],
+                          prior_mean_gamma = prior_mean[5:6], diag_prior_var_gamma = diag(prior_var)[5:6]
+    )
+  } else {
+    stan_file <- "./source/stan_multi_sv.stan"
+    multi_sv_data <- list(d = nrow(Y), Tfin = ncol(Y), Y = Y,
+                          prior_mean_A = prior_mean[c(1,3,2,4)], diag_prior_var_A = diag(prior_var)[c(1,3,2,4)],
+                          prior_mean_gamma = prior_mean[5:6], diag_prior_var_gamma = diag(prior_var)[5:6]
+    )
+  }
   
   multi_sv_model <- cmdstan_model(
     stan_file,
     cpp_options = list(stan_threads = TRUE)
   )
-  
-  # multi_sv_data <- list(d = nrow(Y), Tfin = ncol(Y), Y = Y,
-  #                       prior_mean_A = prior_mean[1:4], prior_var_A = prior_var[1:4, 1:4],
-  #                       prior_mean_gamma = prior_mean[5:6], prior_var_gamma = prior_var[5:6, 5:6]
-  # )
-  
-  multi_sv_data <- list(d = nrow(Y), Tfin = ncol(Y), Y = Y,
-                        prior_mean_A = prior_mean[c(1,3,2,4)], diag_prior_var_A = diag(prior_var)[c(1,3,2,4)],
-                        prior_mean_gamma = prior_mean[5:6], diag_prior_var_gamma = diag(prior_var)[5:6]
-  )
-  
   
   fit_stan_multi_sv <- multi_sv_model$sample(
     multi_sv_data,
@@ -410,28 +586,28 @@ lines(density(hmc.post_samples_Phi[,,4]), col = "forestgreen", lwd = 1.5)
 abline(v = Phi[2,2], lty = 2)
 
 plot(density(mcmcw.post_samples_sigma_eta_11), col = "blue", lty = 2, lwd = 1.5,
-     main = "sigma_eta_11", xlim = c(Sigma_eta[1,1] + c(-0.25, 0.25)))
+     main = "sigma_eta_11", xlim = c(sqrt(Sigma_eta[1,1]) + c(-0.2, 0.2)))
 lines(density(rvgaw.post_samples_sigma_eta_11), col = "red", lty = 2, lwd = 1.5)
-lines(density(hmc.post_samples_Sigma_eta[,,1]), col = "forestgreen", lwd = 1.5)
+lines(density(sqrt(hmc.post_samples_Sigma_eta[,,1])), col = "forestgreen", lwd = 1.5)
 # lines(density(mcmcw1.post_samples_sigma_eta2), col = "green")
-abline(v = Sigma_eta[1,1], lty = 2)
+abline(v = sqrt(Sigma_eta[1,1]), lty = 2)
 
 if (use_cholesky) {
   plot(density(mcmcw.post_samples_sigma_eta_12), col = "blue", lty = 2, lwd = 1.5,
-       main = "sigma_eta_12", xlim = c(Sigma_eta[1,2] + c(-0.25, 0.25)))
+       main = "sigma_eta_12", xlim = c(Sigma_eta[1,2] + c(-0.2, 0.2)))
   lines(density(rvgaw.post_samples_sigma_eta_12), col = "red", lty = 2, lwd = 1.5)
-  abline(v = Sigma_eta[1,2], lty = 2)
+  abline(v = sqrt(Sigma_eta[1,2]), lty = 2)
 
   plot(density(mcmcw.post_samples_sigma_eta_21), col = "blue", lty = 2, lwd = 1.5,
        main = "sigma_eta_21")
   lines(density(rvgaw.post_samples_sigma_eta_21), col = "red", lty = 2, lwd = 1.5)
-  abline(v = Sigma_eta[2,1], lty = 2)
+  abline(v = sqrt(Sigma_eta[2,1]), lty = 2)
 }
 
 plot(density(mcmcw.post_samples_sigma_eta_22), col = "blue", lty = 2, lwd = 1.5, 
-     main = "sigma_eta_22", xlim = c(Sigma_eta[2,2] + c(-0.25, 0.25)))
+     main = "sigma_eta_22", xlim = c(sqrt(Sigma_eta[2,2]) + c(-0.2, 0.2)))
 lines(density(rvgaw.post_samples_sigma_eta_22), col = "red", lty = 2, lwd = 1.5)
-lines(density(hmc.post_samples_Sigma_eta[,,4]), col = "forestgreen", lwd = 1.5)
-abline(v = Sigma_eta[2,2], lty = 2)
+lines(density(sqrt(hmc.post_samples_Sigma_eta[,,4])), col = "forestgreen", lwd = 1.5)
+abline(v = sqrt(Sigma_eta[2,2]), lty = 2)
 
 

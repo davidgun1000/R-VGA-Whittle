@@ -1,5 +1,5 @@
 compute_whittle_likelihood_multi_sv <- function(Y, fourier_freqs, periodogram,
-                                                params) {
+                                                params, use_tensorflow = F) {
   
   Tfin <- ncol(Y)
   
@@ -7,7 +7,7 @@ compute_whittle_likelihood_multi_sv <- function(Y, fourier_freqs, periodogram,
   Sigma_eta <- params$Sigma_eta
   # Sigma_eps <- params$Sigma_eps
   
-  d <- dim(Phi)[1]
+  d <- as.integer(dim(Phi)[1])
   
   freq <- fourier_freqs
   I <- periodogram
@@ -22,63 +22,116 @@ compute_whittle_likelihood_multi_sv <- function(Y, fourier_freqs, periodogram,
   # fft_out <- mvspec(t(Z), detrend = F, plot = F)
   # I_all <- fft_out$fxx
   
-  
   # Spectral density matrix
   Phi_0 <- diag(d)
   Phi_1 <- Phi
   Theta <- diag(d)
   
   log_likelihood <- 0
-  spec_dens_X <- list()
-  
-  # spec_dens1 <- compute_whittle_likelihood_sv(y = Y[1, ],
-  #                                             params = list(phi = Phi[1,1],
-  #                                                           sigma_eta = Sigma_eta[1,1]))$spec_dens_x
-  # 
-  # spec_dens2 <- compute_whittle_likelihood_sv(y = Y[2, ],
-  #                                             params = list(phi = Phi[2,2],
-  #                                                           sigma_eta = Sigma_eta[2,2]))$spec_dens_x
-
-  for (k in 1:length(freq)) {
-    Phi_inv <- solve(Phi_0 - Phi_1 * exp(- 1i * freq[k]))
-    Phi_inv_H <- Conj(t(Phi_inv))
+  if (use_tensorflow) { # compute the likelihood for all frequencies at once
+    nfreqs <- as.integer(length(freq))
+    Phi_0_tf <- tf$eye(d)
+    Phi_0_reshaped <- tf$reshape(Phi_0, c(1L, dim(Phi_0)))
+    Phi_0_tiled <- tf$tile(Phi_0_reshaped, c(nfreqs, 1L, 1L))
     
-    # test <- solve(diag(2) - Phi * exp(- 1i * freq[k])) %*% Sigma_eta %*% 
-    #   solve(diag(2) - t(Phi) * exp(1i * freq[k]))
-    # M <- Phi_0 - Phi_1 * exp(- 1i * freq[k])
-    # M_H <- Conj(t(M))
-    # M_H_inv <- solve(M_H)
+    Phi_1_tf <- tf$Variable(Phi_1)
+    Phi_1_reshaped <- tf$reshape(Phi_1, c(1L, dim(Phi_1)))
+    Phi_1_tiled <- tf$tile(Phi_1_reshaped, c(nfreqs, 1L, 1L))
     
-    spec_dens_X[[k]] <- Phi_inv %*% Theta %*% Sigma_eta %*% Theta %*% Phi_inv_H
-    # spec_dens_X[[k]] <- Phi_inv %*% Theta %*% Sigma_eta %*% Theta %*% Phi_inv_H
+    freq_tf <- tf$Variable(freq)
+    I_tf <- tf$Variable(I[,,1:nfreqs])
+    I_tf <- tf$transpose(I_tf)
     
-    spec_dens_Xi <- diag(pi^2/2, d)
+    # freq_tf <- tf$Variable(exp(-1i * freq))
+    freq_reshape <- tf$reshape(freq_tf, c(dim(freq_tf), 1L, 1L))
     
-    spec_dens <- spec_dens_X[[k]] + spec_dens_Xi  
+    exp_1i <- tf$exp(tf$multiply(-1i, tf$cast(freq_tf, "complex128")))
+    exp_1i_reshape <- tf$reshape(exp_1i, c(dim(exp_1i), 1L, 1L))
+    Phi_mat <- tf$cast(Phi_0_tiled, "complex128") - tf$multiply(tf$cast(Phi_1_tiled, "complex128"), exp_1i_reshape)
+    # Phi_inv <- tf$cast(Phi_0_tiled, "complex128") - tf$multiply(tf$cast(Phi_1_tiled, "complex128"), 
+    #                                                          tf$exp(tf$multiply(-1i, tf$cast(freq_tf, "complex128"))))
+    Phi_inv_tf <- tf$linalg$inv(Phi_mat)
+    Phi_inv_H_tf <- tf$math$conj(tf$transpose(Phi_inv_tf, perm = c(0L, 2L, 1L))) # perm is to make sure transposes are done on the 2x2 matrix not on the batch dimension
     
-    part2 <- sum(diag(solve(spec_dens) %*% I[, , k]))
-    # part2 <- sum(diag(solve(spec_dens) %*% I_all[[k]]))
+    # Theta_tf <- tf$cast(tf$eye(d))
+    # Theta_reshaped <- tf$reshape(Theta_tf, c(dim(Theta_tf), 1L, 1L))
+    # Theta_tiled <- tf$tile(Theta_reshaped, c(nfreqs, 1L, 1L))
+    Theta_tf <- tf$cast(Phi_0_tiled, "complex128")
+    Sigma_eta_tf <- tf$Variable(Sigma_eta, dtype = "complex128")
     
-    # log(det(spec_dens))
+    spec_dens_X_tf <- tf$linalg$matmul(tf$linalg$matmul(tf$linalg$matmul(tf$linalg$matmul(Phi_inv_tf, Theta_tf), Sigma_eta_tf), Theta_tf), Phi_inv_H_tf)
     
-    if (d == 2) {
-      det_spec_dens <- prod(diag(spec_dens)) - spec_dens[1,2] * spec_dens[2,1]
+    spec_dens_Xi_tf <- tf$multiply(pi^2/2, tf$eye(d))
+    spec_dens_Xi_reshape <- tf$reshape(spec_dens_Xi_tf, c(1L, dim(spec_dens_Xi_tf)))
+    spec_dens_Xi_tiled <- tf$tile(spec_dens_Xi_reshape, c(nfreqs, 1L, 1L))
+    
+    spec_dens_tf <- spec_dens_X_tf + tf$cast(spec_dens_Xi_tiled, "complex128")
+    
+    inv_spec_dens_I <- tf$matmul(tf$linalg$inv(spec_dens_tf), I_tf)
+    part2_tf <- tf$reduce_sum(tf$linalg$diag_part(inv_spec_dens_I), 1L)
+    
+    det_spec_dens_tf <- tf$math$reduce_prod(tf$linalg$eigvals(spec_dens_tf), axis = 1L)
+    part1_tf <- tf$math$log(det_spec_dens_tf)
+    
+    log_likelihood_tf <- -(part1_tf + part2_tf)
+    
+    if (any(as.vector(tf$math$imag(log_likelihood_tf)) > 1e-10)) {
+      print("Warning: Imaginary part of the log likelihood is non-zero")
+      browser()
     } else {
-      det_spec_dens <- prod(eigen(spec_dens, only.values = T)$values)
+      log_likelihood <- sum(as.vector(tf$math$real(log_likelihood_tf)))
+    }
+
+    spec_dens_X <- as.matrix(spec_dens_X_tf) # for the return object
+    
+  } else {
+    
+    spec_dens_X <- list()
+    
+    for (k in 1:length(freq)) {
+      Phi_inv <- solve(Phi_0 - Phi_1 * exp(- 1i * freq[k]))
+      Phi_inv_H <- Conj(t(Phi_inv))
+      
+      # test <- solve(diag(2) - Phi * exp(- 1i * freq[k])) %*% Sigma_eta %*% 
+      #   solve(diag(2) - t(Phi) * exp(1i * freq[k]))
+      # M <- Phi_0 - Phi_1 * exp(- 1i * freq[k])
+      # M_H <- Conj(t(M))
+      # M_H_inv <- solve(M_H)
+      
+      spec_dens_X[[k]] <- Phi_inv %*% Theta %*% Sigma_eta %*% Theta %*% Phi_inv_H
+      # spec_dens_X[[k]] <- Phi_inv %*% Theta %*% Sigma_eta %*% Theta %*% Phi_inv_H
+      
+      spec_dens_Xi <- diag(pi^2/2, d)
+      
+      spec_dens <- spec_dens_X[[k]] + spec_dens_Xi  
+      
+      part2 <- sum(diag(solve(spec_dens) %*% I[, , k]))
+      # test <- Conj(t(I[,,k])) %*% solve(spec_dens) %*% I[,,k]
+      # part2 <- sum(diag(solve(spec_dens) %*% I_all[[k]]))
+      
+      # log(det(spec_dens))
+      
+      if (d == 2) {
+        det_spec_dens <- prod(diag(spec_dens)) - spec_dens[1,2] * spec_dens[2,1]
+      } else {
+        det_spec_dens <- prod(eigen(spec_dens, only.values = T)$values)
+      }
+      
+      part1 <- log(det_spec_dens)
+      
+      log_likelihood <- log_likelihood - (part1 + part2)
+      # test <- spec_dens[1, 2] * spec_dens[2, 1] - spec_dens[1, 1] * spec_dens[2, 2]
     }
     
-    part1 <- log(det_spec_dens)
+    if (Im(log_likelihood) > 1e-10) { # if imaginary part is non zero
+      print("Warning: Imaginary part of the log likelihood is non-zero")
+      browser()
+    } else { # if imaginary part is effectively zero, get rid of it
+      log_likelihood <- Re(log_likelihood)
+    }
+  }
     
-    log_likelihood <- log_likelihood - (part1 + part2)
-    # test <- spec_dens[1, 2] * spec_dens[2, 1] - spec_dens[1, 1] * spec_dens[2, 2]
-  }
-  
-  if (Im(log_likelihood) > 1e-10) { # if imaginary part is non zero
-    print("Warning: Imaginary part of the log likelihood is non-zero")
-  } else { # if imaginary part is effectively zero, get rid of it
-    log_likelihood <- Re(log_likelihood)
-  }
-  
+    
   return(list(log_likelihood = log_likelihood,
               spec_dens_X = spec_dens_X))
   # return(spec_dens_X)

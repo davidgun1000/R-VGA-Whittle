@@ -16,7 +16,7 @@ source("./source/run_mcmc_multi_sv.R")
 source("./source/compute_whittle_likelihood_multi_sv.R")
 # source("./source/run_mcmc_sv.R")
 # source("./source/compute_whittle_likelihood_sv.R")
-source("./source/construct_prior.R")
+source("./source/construct_prior2.R")
 source("./source/map_functions.R")
 # source("./archived/compute_partial_whittle_likelihood.R")
 source("./source/compute_grad_hessian.R")
@@ -45,17 +45,18 @@ result_directory <- "./results/"
 
 ## Flags
 date <- "20230823"
+use_cholesky <- T
 rerun_rvgaw <- T
 rerun_mcmcw <- T
 rerun_hmc <- T
 
-save_rvgaw_results <- F
-save_mcmcw_results <- F
-save_hmc_results <- F
+save_rvgaw_results <- T
+save_mcmcw_results <- T
+save_hmc_results <- T
 
 ## R-VGAW flags
 use_tempering <- T
-reorder_freq <- F
+reorder_freq <- T
 decreasing <- T
 
 #########################
@@ -71,35 +72,38 @@ if (dataset == "daily") {
 } else if (dataset == "daily10000") {
   returns_data <- read.csv("./data/5_Industry_Portfolios_Daily_cleaned.csv")
   datafile <- "_daily10000"
-  Y <- returns_data[1:10000, 2:4]
+  Y <- returns_data[1:10000, 2:3]
 } else {
   returns_data <- read.csv("./data/5_Industry_Portfolios_cleaned.CSV")
   datafile <- ""
-  Y <- returns_data[1:100, 2:4]
+  Y <- returns_data[1:100, 2:3]
 }
 
 # Y <- returns_data[, 2:4]
 Y_mean_corrected <- Y - colMeans(Y)
 d <- ncol(Y_mean_corrected)
+# param_dim <- d + d + d*(d-1)/2
 
 par(mfrow = c(d, 1))
 for (c in 1:ncol(Y_mean_corrected)) {
   plot(Y_mean_corrected[, c], type = "l")
 }
+
 ## Construct initial distribution/prior
-prior <- construct_prior(data = Y_mean_corrected)
+prior <- construct_prior(data = Y, use_cholesky = use_cholesky)
 prior_mean <- prior$prior_mean
 prior_var <- prior$prior_var
 
 param_dim <- length(prior_mean)
 
+browser()
 ################################
 ##    R-VGAW implementation   ##
 ################################
 
 if (use_tempering) {
   n_temper <- 10
-  K <- 100
+  K <- 10
   temper_schedule <- rep(1/K, K)
   temper_info <- paste0("_temper", n_temper)
 } else {
@@ -146,14 +150,14 @@ print("Starting MCMC with Whittle likelihood...")
 mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_results_svdata", datafile, 
                          "_", date, ".rds")
 
-n_post_samples <- 10000
-burn_in <- 1000
+n_post_samples <- 5000
+burn_in <- 5000
 iters <- n_post_samples + burn_in
 
 if (rerun_mcmcw) {
   mcmcw_results <- run_mcmc_multi_sv(data = Y_mean_corrected, iters = iters, burn_in = burn_in, 
                                      prior_mean = prior_mean, prior_var = prior_var,
-                                     adapt_proposal = T, use_whittle_likelihood = T)
+                                     adapt_proposal = F, use_whittle_likelihood = T)
   if (save_mcmcw_results) {
     saveRDS(mcmcw_results, mcmcw_filepath)
   }
@@ -186,14 +190,20 @@ if (rerun_hmc) {
     cpp_options = list(stan_threads = TRUE)
   )
   
-  hmc_indices <- c(matrix(1:(d^2), d, d, byrow = T)) # HMC vech() goes col-wise so need to modify the order of parameters a bit
+  # hmc_indices <- c(matrix(1:(d^2), d, d, byrow = T)) # HMC vech() goes col-wise so need to modify the order of parameters a bit
+  # multi_sv_data <- list(d = ncol(Y_mean_corrected), Tfin = nrow(Y_mean_corrected), 
+  #                       Y = Y_mean_corrected,
+  #                       prior_mean_A = prior_mean[hmc_indices], 
+  #                       diag_prior_var_A = diag(prior_var)[hmc_indices],
+  #                       prior_mean_gamma = prior_mean[(d^2+1):param_dim], 
+  #                       diag_prior_var_gamma = diag(prior_var)[(d^2+1):param_dim]
+  # )
+  
   multi_sv_data <- list(d = ncol(Y_mean_corrected), Tfin = nrow(Y_mean_corrected), 
                         Y = Y_mean_corrected,
-                        prior_mean_A = prior_mean[hmc_indices], 
-                        diag_prior_var_A = diag(prior_var)[hmc_indices],
-                        prior_mean_gamma = prior_mean[(d^2+1):param_dim], 
-                        diag_prior_var_gamma = diag(prior_var)[(d^2+1):param_dim]
-  )
+                        prior_mean_Phi = prior_mean[1:d], diag_prior_var_Phi = diag(prior_var)[1:d],
+                        prior_mean_gamma = prior_mean[(d+1):param_dim], diag_prior_var_gamma = diag(prior_var)[(d+1):param_dim],
+                        use_chol = 0)
   
   
   fit_stan_multi_sv <- multi_sv_model$sample(
@@ -216,14 +226,15 @@ if (rerun_hmc) {
   stan_results <- readRDS(hmc_filepath)
 }
 
-hmc.post_samples_Phi <- stan_results$draws[,,1:(d^2)]
-hmc.post_samples_Sigma_eta <- stan_results$draws[,,(d^2+1):(2*d^2)]
+hmc.post_samples_Phi <- stan_results$draws[,,1:d]
+hmc.post_samples_Sigma_eta <- stan_results$draws[,,(d+1):(param_dim)]
 
 ## Plot posterior estimates
 indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
 hmc_indices <- c(matrix(1:d^2, d, d, byrow = T))
 par(mfrow = c(d+1,d))
 
+# param_names <- c("phi_11", "phi_12", "phi_21", "phi_22")
 for (k in 1:nrow(indices)) {
   i <- indices[k, 1]
   j <- indices[k, 2]
@@ -233,21 +244,21 @@ for (k in 1:nrow(indices)) {
   
   plot(density(rvgaw.post_samples_phi), col = "red", lty = 2, 
        main = bquote(phi[.(c(i,j))]))
-  lines(density(mcmcw.post_samples_phi), col = "blue", lty = 2)
+  lines(density(mcmcw.post_samples_phi[-(1:burn_in)]), col = "blue", lty = 2)
   lines(density(hmc.post_samples_Phi[,,hmc_indices[k]]), col = "forestgreen")
   # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
   #        lty = c(2,2,1), cex = 0.7)
 }
 
 # par(mfrow = c(1,d))
-hmc_indices <- c(1,5,9)
+hmc_indices <- diag(matrix(1:(d^2), d, d))
 for (k in 1:d) {
   rvgaw.post_samples_sigma_eta <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[k,k]))
   mcmcw.post_samples_sigma_eta <- unlist(lapply(mcmcw.post_samples_Sigma_eta, function(x) x[k,k]))
   
   plot(density(rvgaw.post_samples_sigma_eta), col = "red", lty = 2,
        main = bquote(sigma_eta[.(c(k,k))]))
-  lines(density(mcmcw.post_samples_sigma_eta), col = "blue", lty = 2)
+  lines(density(mcmcw.post_samples_sigma_eta[-(1:burn_in)]), col = "blue", lty = 2)
   lines(density(hmc.post_samples_Sigma_eta[,,hmc_indices[k]]), col = "forestgreen")
   # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
   #        lty = c(2,2,1), cex = 0.3, y.intersp = 0.25)
