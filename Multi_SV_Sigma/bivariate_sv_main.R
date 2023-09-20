@@ -56,12 +56,12 @@ plot_likelihood_surface <- F
 plot_prior_samples <- F
 
 rerun_rvgaw <- T
-rerun_mcmcw <- T
-rerun_hmc <- T
+rerun_mcmcw <- F
+rerun_hmc <- F
 
-save_rvgaw_results <- T
-save_mcmcw_results <- T
-save_hmc_results <- T
+save_rvgaw_results <- F
+save_mcmcw_results <- F
+save_hmc_results <- F
 
 ## R-VGAW flags
 use_tempering <- T
@@ -77,7 +77,7 @@ result_directory <- paste0("./results/", prior_type, "/")
 
 dataset <- "5" 
 
-Tfin <- 1000
+Tfin <- 10000
 if (regenerate_data) {
   
   sigma_eta1 <- sqrt(0.2)#0.1

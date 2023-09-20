@@ -1,6 +1,6 @@
 ## Calculate the gradient and Hessian of the likelihood based on those samples
 compute_grad_hessian <- tf_function(
-  testf <- function(samples_tf, I_i, freq_i, use_cholesky = F) {
+  compute_grad_hessian <- function(samples_tf, I_i, freq_i, use_cholesky = F) {
     with (tf$GradientTape() %as% tape2, {
       with (tf$GradientTape(persistent = TRUE) %as% tape1, {
         
@@ -19,14 +19,18 @@ compute_grad_hessian <- tf_function(
         
         ## Construct Sigma_eta
         if (use_cholesky) {
-          zero_vec <- tf$constant(rep(0, S), dtype = "float64")
-          L_elements <- tf$concat(list(tf$reshape(tf$exp(samples_tf[, d+1]), c(S, 1L)), 
-                                       tf$reshape(zero_vec, c(S, 1L)),
-                                       tf$reshape(samples_tf[, param_dim], c(S, 1L)),
-                                       tf$reshape(tf$exp(samples_tf[, param_dim - 1]), c(S, 1L))
-          ), axis = 1L)
-          L_tf <- tf$reshape(L_elements, c(S, 2L, 2L))
-          Sigma_eta_samples_tf <- tf$linalg$matmul(L_tf, tf$transpose(L_tf, perm = c(0L, 2L, 1L)))
+          # zero_vec <- tf$constant(rep(0, S), dtype = "float64")
+          # L_elements <- tf$concat(list(tf$reshape(tf$exp(samples_tf[, d+1]), c(S, 1L)),
+          #                              tf$reshape(zero_vec, c(S, 1L)),
+          #                              tf$reshape(samples_tf[, param_dim], c(S, 1L)),
+          #                              tf$reshape(tf$exp(samples_tf[, param_dim - 1]), c(S, 1L))
+          # ), axis = 1L)
+          # L_tf <- tf$reshape(L_elements, c(S, 2L, 2L))
+          # Sigma_eta_samples_tf <- tf$linalg$matmul(L_tf, tf$transpose(L_tf, perm = c(0L, 2L, 1L)))
+
+          Lsamples_tf <- fill_lower_tri(d, samples_tf[, (d+1):param_dim])
+          Sigma_eta_samples_tf <- tf$linalg$matmul(Lsamples_tf, tf$transpose(Lsamples_tf, perm = c(0L, 2L, 1L)))
+          
         } else {
           Sigma_eta_samples_tf <- tf$linalg$diag(tf$exp(samples_tf[, (d^2+1):param_dim]))
         }
@@ -96,3 +100,48 @@ compute_grad_hessian <- tf_function(
   },
   reduce_retracing=F
 )
+
+# fill_lower_tri_tf <- tf_function(
+fill_lower_tri <- function(dim, vals) {
+  d <- as.integer(dim)
+  S <- as.integer(nrow(vals))
+  # vals_tf <- tf$constant(vals, dtype = "float64")
+  
+  diag_mat <- tf$linalg$diag(tf$exp(vals[, 1:d]))
+  diag_mat_tiled <- tf$tile(diag_mat, c(S, 1L, 1L))
+  
+  nlower <- as.integer(d*(d-1)/2)
+  numlower = vals[, (d+1):(d+nlower)]
+  numlower = tf$reshape(numlower, c(S*nlower, 1L))
+  numlower = tf$squeeze(numlower) 
+  # numlower = tf$reshape(numlower, -1L) # flatten into a vector
+  # numlower = c(t(vals[, (d+1):(d+nlower)]))
+  
+  ones = tf$ones(c(d, d), dtype="int64")
+  mask_a = tf$linalg$band_part(ones, -1L, 0L)  # Upper triangular matrix of 0s and 1s
+  mask_b = tf$linalg$band_part(ones, 0L, 0L)  # Diagonal matrix of 0s and 1s
+  mask = tf$subtract(mask_a, mask_b) # Mask of upper triangle above diagonal
+  
+  zero = tf$constant(0L, dtype="int64")
+  non_zero = tf$not_equal(mask, zero) #Conversion of mask to Boolean matrix
+  non_zero_tile <- tf$tile(non_zero, c(S, 1L))
+  indices = tf$where(non_zero_tile) # Extracting the indices of upper triangular elements
+  
+  ## need to reshape indices here
+  # S <- dim(vals)[1]
+  # indices <- tf$reshape(indices, c(1L, dim(indices)))
+  # batch_indices <-tf$tile(indices, c(S, 1L, 1L))
+  shape <- tf$cast(c(S*d, d), dtype="int64")
+  # shape_test <- tf$reshape(shape, c(dim(shape), 1L))
+  # batch_shapes <- tf$tile(shape, c(S, 1L))
+  out = tf$SparseTensor(indices, numlower, 
+                        dense_shape = shape)
+  lower_tri = tf$sparse$to_dense(out)
+  lower_tri_reshaped = tf$reshape(lower_tri, c(S, d, d))
+  # dense = tf$print(dense, [dense], summarize=100)
+  # sess.run(dense)
+  L = diag_mat + tf$cast(lower_tri_reshaped, dtype = "float64")
+  
+  return(L)
+}
+# )
