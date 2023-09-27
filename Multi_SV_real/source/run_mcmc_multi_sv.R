@@ -6,7 +6,7 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
   
   Y <- data
   d <- as.integer(ncol(Y))
-  Tfin <- nrow(Y)
+  Tfin <- as.integer(nrow(Y))
   
   if (use_cholesky) {
     param_dim <- d + (d*(d-1)/2 + d) # m^2 AR parameters, 
@@ -14,7 +14,7 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
   } else {
     param_dim <- d^2 + d
   }
-
+  
   ## Set up empty vectors for acceptance, post samples etc
   accept <- rep(0, iters)
   acceptProb <- c()
@@ -48,13 +48,15 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
   
   ### the last 3 will be used to construct L
   if (use_cholesky) {
-    L <- diag(exp(theta_curr[(d+1):(length(theta_curr) - 1)]))
-    L[2,1] <- theta_curr[length(theta_curr)]
-    Sigma_eta_curr <- L %*% t(L)
+    # L <- diag(exp(theta_curr[(d+1):(length(theta_curr) - 1)]))
+    # L[2,1] <- theta_curr[length(theta_curr)]
+    # Sigma_eta_curr <- L %*% t(L)
+    
+    Sigma_eta_curr <- construct_Sigma_eta(theta_curr, d, use_cholesky)
   } else {
     Sigma_eta_curr <- diag(exp(theta_curr[(d^2+1):param_dim]))
   }
-
+  
   ## 3. Map (A, Sigma_eta) to (Phi, Sigma_eta) using the mapping in Ansley and Kohn (1986)
   # Phi_curr <- backward_map(A_curr, Sigma_eta_curr)
   params_curr <- list(Phi = Phi_curr, Sigma_eta = Sigma_eta_curr)
@@ -99,9 +101,11 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
     
     if (use_cholesky) {
       ### the last 3 will be used to construct L
-      L <- diag(exp(theta_prop[(d+1):(length(theta_prop) - 1)]))
-      L[2,1] <- theta_prop[length(theta_prop)]
-      Sigma_eta_prop <- L %*% t(L)
+      # L <- diag(exp(theta_prop[(d+1):(length(theta_prop) - 1)]))
+      # L[2,1] <- theta_prop[length(theta_prop)]
+      # Sigma_eta_prop <- L %*% t(L)
+      
+      Sigma_eta_prop <- construct_Sigma_eta(theta_prop, d, use_cholesky)
     } else {
       Sigma_eta_prop <- diag(exp(theta_prop[(d^2+1):param_dim]))
     }

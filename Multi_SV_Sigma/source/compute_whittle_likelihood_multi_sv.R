@@ -1,7 +1,7 @@
 compute_whittle_likelihood_multi_sv <- function(Y, fourier_freqs, periodogram,
                                                 params, use_tensorflow = F) {
   
-  Tfin <- ncol(Y)
+  Tfin <- nrow(Y)
   
   Phi <- params$Phi
   Sigma_eta <- params$Sigma_eta

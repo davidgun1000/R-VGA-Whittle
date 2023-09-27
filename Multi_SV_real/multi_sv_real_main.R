@@ -20,6 +20,7 @@ source("./source/run_mcmc_multi_sv.R")
 source("./source/compute_whittle_likelihood_multi_sv.R")
 source("./source/construct_prior2.R")
 source("./source/map_functions.R")
+source("./source/construct_Sigma.R")
 # source("./archived/compute_partial_whittle_likelihood.R")
 source("./source/compute_grad_hessian.R")
 
@@ -43,25 +44,23 @@ if (length(gpus) > 0) {
   })
 }
 
-result_directory <- "./results/"
-
 ## Flags
 date <- "20230918"
-# regenerate_data <- F
-# save_data <- F
 use_cholesky <- T # use lower Cholesky factor to parameterise Sigma_eta
 # prior_type <- "minnesota"
 use_heaps_mapping <- F
 plot_likelihood_surface <- F
 plot_prior_samples <- F
+plot_trajectories <- F
 
-rerun_rvgaw <- F
-rerun_mcmcw <- F
-rerun_hmc <- F
+rerun_rvgaw <- T
+rerun_mcmcw <- T
+rerun_hmc <- T
 
-save_rvgaw_results <- F
-save_mcmcw_results <- F
-save_hmc_results <- F
+save_rvgaw_results <- T
+save_mcmcw_results <- T
+save_hmc_results <- T
+save_plots <- T
 
 ## R-VGAW flags
 use_tempering <- F
@@ -76,30 +75,31 @@ decreasing <- T
 ##      Read data      ##
 #########################
 
-dataset <- "monthly" # daily or monthly
+dataset <- "daily" # daily or monthly
+nstocks <- 2
+nobs <- 500
+
+result_directory <- paste0("./results/", dataset, "_", nstocks, "stocks/")
+
 
 if (dataset == "daily") {
   returns_data <- read.csv("./data/5_Industry_Portfolios_Daily_cleaned.csv")
-  datafile <- "_daily"
-  Y <- returns_data[, 2:4]
-} else if (dataset == "daily10000") {
-  returns_data <- read.csv("./data/5_Industry_Portfolios_Daily_cleaned.csv")
-  datafile <- "_daily10000"
-  Y <- returns_data[1:10000, 2:3]
-} else {
+  datafile <- paste0("_daily", nobs)
+  Y <- returns_data[1:nobs, 2:(2+nstocks-1)]
+} else { # monthly
   returns_data <- read.csv("./data/5_Industry_Portfolios_cleaned.CSV")
-  datafile <- ""
-  Y <- returns_data[, 2:3]
+  datafile <- paste0("_monthly", nobs)
+  Y <- returns_data[1:nobs, 2:(2+nstocks-1)]
 }
 
 # Y <- returns_data[, 2:4]
 Y_mean_corrected <- Y - colMeans(Y)
 d <- ncol(Y_mean_corrected)
 
-par(mfrow = c(d, 1))
-for (c in 1:ncol(Y_mean_corrected)) {
-  plot(Y_mean_corrected[, c], type = "l")
-}
+# par(mfrow = c(d, 1))
+# for (c in 1:ncol(Y_mean_corrected)) {
+#   plot(Y_mean_corrected[, c], type = "l")
+# }
 
 ############################## Inference #######################################
 
@@ -346,9 +346,8 @@ a_vals <- 1
 ################ R-VGA starts here #################
 print("Starting R-VGAL with Whittle likelihood...")
 
-rvgaw_filepath <- paste0(result_directory, "rvga_whittle_results_realdata", 
-                         temper_info, reorder_info, "_", date, "_", dataset, 
-                         ".rds")
+rvgaw_filepath <- paste0(result_directory, "rvga_whittle_results_realdata",  
+                         datafile, temper_info, reorder_info, "_", date, ".rds")
 
 if (rerun_rvgaw) {
   rvgaw_results <- run_rvgaw_multi_sv(data = Y_mean_corrected, prior_mean = prior_mean, 
@@ -369,31 +368,31 @@ if (rerun_rvgaw) {
 rvgaw.post_samples_Phi <- rvgaw_results$post_samples$Phi
 rvgaw.post_samples_Sigma_eta <- rvgaw_results$post_samples$Sigma_eta
 
-rvgaw.post_samples_phi_11 <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[1,1]))
-# rvgaw.post_samples_phi_12 <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[1,2]))
-# rvgaw.post_samples_phi_21 <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[2,1]))
-rvgaw.post_samples_phi_22 <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[2,2]))
-
-rvgaw.post_samples_sigma_eta_11 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[1,1]))
-rvgaw.post_samples_sigma_eta_22 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[2,2]))
-
-if (use_cholesky) {
-  rvgaw.post_samples_sigma_eta_12 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[1,2]))
-  rvgaw.post_samples_sigma_eta_21 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[2,1]))
-}
-
-par(mfrow = c(3,2))
-plot(density(rvgaw.post_samples_phi_11), col = "blue", main = "phi_11")
-plot(density(rvgaw.post_samples_phi_22), col = "blue", main = "phi_22")
-
-plot(density(rvgaw.post_samples_sigma_eta_11), col = "blue", main = "sigma_eta_11")
-
-if (use_cholesky) {
-  plot(density(rvgaw.post_samples_sigma_eta_12), col = "blue", main = "sigma_eta_12")
-  plot(density(rvgaw.post_samples_sigma_eta_21), col = "blue", main = "sigma_eta_21")
-}
-
-plot(density(rvgaw.post_samples_sigma_eta_22), col = "blue", main = "sigma_eta_22")
+# rvgaw.post_samples_phi_11 <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[1,1]))
+# # rvgaw.post_samples_phi_12 <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[1,2]))
+# # rvgaw.post_samples_phi_21 <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[2,1]))
+# rvgaw.post_samples_phi_22 <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[2,2]))
+# 
+# rvgaw.post_samples_sigma_eta_11 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[1,1]))
+# rvgaw.post_samples_sigma_eta_22 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[2,2]))
+# 
+# if (use_cholesky) {
+#   rvgaw.post_samples_sigma_eta_12 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[1,2]))
+#   rvgaw.post_samples_sigma_eta_21 <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[2,1]))
+# }
+# 
+# par(mfrow = c(3,2))
+# plot(density(rvgaw.post_samples_phi_11), col = "royalblue", main = "phi_11")
+# plot(density(rvgaw.post_samples_phi_22), col = "royalblue", main = "phi_22")
+# 
+# plot(density(rvgaw.post_samples_sigma_eta_11), col = "royalblue", main = "sigma_eta_11")
+# 
+# if (use_cholesky) {
+#   plot(density(rvgaw.post_samples_sigma_eta_12), col = "royalblue", main = "sigma_eta_12")
+#   plot(density(rvgaw.post_samples_sigma_eta_21), col = "royalblue", main = "sigma_eta_21")
+# }
+# 
+# plot(density(rvgaw.post_samples_sigma_eta_22), col = "royalblue", main = "sigma_eta_22")
 
 #############################
 ##   MCMC implementation   ##
@@ -401,7 +400,7 @@ plot(density(rvgaw.post_samples_sigma_eta_22), col = "blue", main = "sigma_eta_2
 print("Starting MCMC with Whittle likelihood...")
 
 mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_results_realdata", 
-                         "_", date, "_", dataset, ".rds")
+                         datafile, "_", date, ".rds")
 
 n_post_samples <- 10000
 burn_in <- 5000
@@ -420,40 +419,40 @@ if (rerun_mcmcw) {
 }
 
 ## Extract samples
-mcmcw.post_samples_phi <- lapply(mcmcw_results$post_samples, function(x) x$Phi) #post_samples_theta[, 1]
-mcmcw.post_samples_sigma_eta <- lapply(mcmcw_results$post_samples, function(x) x$Sigma_eta) #post_samples_theta[, 2]
+mcmcw.post_samples_Phi <- lapply(mcmcw_results$post_samples, function(x) x$Phi) #post_samples_theta[, 1]
+mcmcw.post_samples_Sigma_eta <- lapply(mcmcw_results$post_samples, function(x) x$Sigma_eta) #post_samples_theta[, 2]
 
-mcmcw.post_samples_phi_11 <- lapply(mcmcw.post_samples_phi, function(x) x[1,1])
-mcmcw.post_samples_phi_12 <- lapply(mcmcw.post_samples_phi, function(x) x[1,2])
-mcmcw.post_samples_phi_21 <- lapply(mcmcw.post_samples_phi, function(x) x[2,1])
-mcmcw.post_samples_phi_22 <- lapply(mcmcw.post_samples_phi, function(x) x[2,2])
-
-mcmcw.post_samples_phi_11 <- as.mcmc(unlist(mcmcw.post_samples_phi_11[-(1:burn_in)]))
-mcmcw.post_samples_phi_12 <- as.mcmc(unlist(mcmcw.post_samples_phi_12[-(1:burn_in)]))
-mcmcw.post_samples_phi_21 <- as.mcmc(unlist(mcmcw.post_samples_phi_21[-(1:burn_in)]))
-mcmcw.post_samples_phi_22 <- as.mcmc(unlist(mcmcw.post_samples_phi_22[-(1:burn_in)]))
-
-mcmcw.post_samples_sigma_eta_11 <- lapply(mcmcw.post_samples_sigma_eta, function(x) x[1,1])
-mcmcw.post_samples_sigma_eta_12 <- lapply(mcmcw.post_samples_sigma_eta, function(x) x[1,2])
-mcmcw.post_samples_sigma_eta_21 <- lapply(mcmcw.post_samples_sigma_eta, function(x) x[2,1])
-mcmcw.post_samples_sigma_eta_22 <- lapply(mcmcw.post_samples_sigma_eta, function(x) x[2,2])
-
-mcmcw.post_samples_sigma_eta_11 <- as.mcmc(unlist(mcmcw.post_samples_sigma_eta_11[-(1:burn_in)]))
-mcmcw.post_samples_sigma_eta_12 <- as.mcmc(unlist(mcmcw.post_samples_sigma_eta_12[-(1:burn_in)]))
-mcmcw.post_samples_sigma_eta_21 <- as.mcmc(unlist(mcmcw.post_samples_sigma_eta_21[-(1:burn_in)]))
-mcmcw.post_samples_sigma_eta_22 <- as.mcmc(unlist(mcmcw.post_samples_sigma_eta_22[-(1:burn_in)]))
-
-
-par(mfrow = c(3,2))
-coda::traceplot(mcmcw.post_samples_phi_11, main = "Trace plot for phi_11")
-coda::traceplot(mcmcw.post_samples_phi_22, main = "Trace plot for phi_22")
-coda::traceplot(mcmcw.post_samples_sigma_eta_11, main = "Trace plot for sigma_eta_11")
-
-if (use_cholesky) {
-  coda::traceplot(mcmcw.post_samples_sigma_eta_12, main = "Trace plot for sigma_eta_12")
-  coda::traceplot(mcmcw.post_samples_sigma_eta_21, main = "Trace plot for sigma_eta_21")
-}
-coda::traceplot(mcmcw.post_samples_sigma_eta_22, main = "Trace plot for sigma_eta_22")
+# mcmcw.post_samples_phi_11 <- lapply(mcmcw.post_samples_phi, function(x) x[1,1])
+# mcmcw.post_samples_phi_12 <- lapply(mcmcw.post_samples_phi, function(x) x[1,2])
+# mcmcw.post_samples_phi_21 <- lapply(mcmcw.post_samples_phi, function(x) x[2,1])
+# mcmcw.post_samples_phi_22 <- lapply(mcmcw.post_samples_phi, function(x) x[2,2])
+# 
+# mcmcw.post_samples_phi_11 <- as.mcmc(unlist(mcmcw.post_samples_phi_11[-(1:burn_in)]))
+# mcmcw.post_samples_phi_12 <- as.mcmc(unlist(mcmcw.post_samples_phi_12[-(1:burn_in)]))
+# mcmcw.post_samples_phi_21 <- as.mcmc(unlist(mcmcw.post_samples_phi_21[-(1:burn_in)]))
+# mcmcw.post_samples_phi_22 <- as.mcmc(unlist(mcmcw.post_samples_phi_22[-(1:burn_in)]))
+# 
+# mcmcw.post_samples_sigma_eta_11 <- lapply(mcmcw.post_samples_sigma_eta, function(x) x[1,1])
+# mcmcw.post_samples_sigma_eta_12 <- lapply(mcmcw.post_samples_sigma_eta, function(x) x[1,2])
+# mcmcw.post_samples_sigma_eta_21 <- lapply(mcmcw.post_samples_sigma_eta, function(x) x[2,1])
+# mcmcw.post_samples_sigma_eta_22 <- lapply(mcmcw.post_samples_sigma_eta, function(x) x[2,2])
+# 
+# mcmcw.post_samples_sigma_eta_11 <- as.mcmc(unlist(mcmcw.post_samples_sigma_eta_11[-(1:burn_in)]))
+# mcmcw.post_samples_sigma_eta_12 <- as.mcmc(unlist(mcmcw.post_samples_sigma_eta_12[-(1:burn_in)]))
+# mcmcw.post_samples_sigma_eta_21 <- as.mcmc(unlist(mcmcw.post_samples_sigma_eta_21[-(1:burn_in)]))
+# mcmcw.post_samples_sigma_eta_22 <- as.mcmc(unlist(mcmcw.post_samples_sigma_eta_22[-(1:burn_in)]))
+# 
+# 
+# par(mfrow = c(3,2))
+# coda::traceplot(mcmcw.post_samples_phi_11, main = "Trace plot for phi_11")
+# coda::traceplot(mcmcw.post_samples_phi_22, main = "Trace plot for phi_22")
+# coda::traceplot(mcmcw.post_samples_sigma_eta_11, main = "Trace plot for sigma_eta_11")
+# 
+# if (use_cholesky) {
+#   coda::traceplot(mcmcw.post_samples_sigma_eta_12, main = "Trace plot for sigma_eta_12")
+#   coda::traceplot(mcmcw.post_samples_sigma_eta_21, main = "Trace plot for sigma_eta_21")
+# }
+# coda::traceplot(mcmcw.post_samples_sigma_eta_22, main = "Trace plot for sigma_eta_22")
 
 ########################
 ###       STAN       ###
@@ -461,13 +460,13 @@ coda::traceplot(mcmcw.post_samples_sigma_eta_22, main = "Trace plot for sigma_et
 print("Starting HMC...")
 
 hmc_filepath <- paste0(result_directory, "hmc_results_realdata", 
-                       "_", date, "_", dataset, ".rds")
+                       datafile, "_", date, ".rds")
 
 
 if (rerun_hmc) {
   
-  n_post_samples <- 10000
-  burn_in <- 1000
+  # n_post_samples <- 10000
+  # burn_in <- 1000
   stan.iters <- n_post_samples + burn_in
   d <- as.integer(ncol(Y_mean_corrected))
   
@@ -508,71 +507,177 @@ if (rerun_hmc) {
   stan_results <- readRDS(hmc_filepath)
 }
 
-hmc.post_samples_Phi <- stan_results$draws[,,1:4]
-hmc.post_samples_Sigma_eta <- stan_results$draws[,,5:8]
+hmc.post_samples_Phi <- stan_results$draws[,,1:(d^2)]
+hmc.post_samples_Sigma_eta <- stan_results$draws[,,(d^2+1):(2*d^2)]
 
-## Posterior density comparisons
-
-# par(mfrow = c(2,4))
-layout.matrix <- matrix(c(1, 2, 0, 3, 4, 5), nrow = 2, ncol = 3, byrow = T)
-layout(mat = layout.matrix)
-# layout.show(5)
-par(mar = c(4, 4, 4, 4))
-
-# plot_margin <- c(-0.2, 0.2)
-plot(density(mcmcw.post_samples_phi_11), col = "blue", lty = 2, lwd = 1.5, 
-     main = "phi_11")#, 
-     # xlim = c(Phi[1,1] + plot_margin))
-lines(density(rvgaw.post_samples_phi_11), col = "red", lty = 2, lwd = 1.5,)
-lines(density(hmc.post_samples_Phi[,,1]), col = "forestgreen", lwd = 1.5,)
-# lines(density(mcmcw1.post_samples_phi), col = "green")
-# abline(v = Phi[1,1], lty = 2)
-legend("topright", legend = c("MCMCW", "R-VGAW", "HMC"), col = c("blue", "red", "forestgreen"),
-       lty = c(2,2,1), cex = 0.7)
-
-# plot(density(mcmcw.post_samples_phi_12), col = "blue", lty = 2, lwd = 1.5,
-#      main = "phi_12", 
-#      xlim = c(Phi[1,2] + plot_margin))
-# lines(density(rvgaw.post_samples_phi_12), col = "red", lty = 2, lwd = 1.5,)
-# lines(density(hmc.post_samples_Phi[,,3]), col = "forestgreen", lwd = 1.5,)
-# abline(v = Phi[1,2], lty = 2)
+# ## Posterior density comparisons
 # 
-# plot(density(mcmcw.post_samples_phi_21), col = "blue", lty = 2, lwd = 1.5, 
-#      main = "phi_21", 
-#      xlim = c(Phi[2,1] + plot_margin))
-# lines(density(rvgaw.post_samples_phi_21), col = "red", lty = 2, lwd = 1.5)
-# lines(density(hmc.post_samples_Phi[,,2]), col = "forestgreen", lwd = 1.5)
-# abline(v = Phi[2,1], lty = 2)
+# # par(mfrow = c(2,4))
+# layout.matrix <- matrix(c(1, 2, 0, 3, 4, 5), nrow = 2, ncol = 3, byrow = T)
+# layout(mat = layout.matrix)
+# # layout.show(5)
+# par(mar = c(4, 4, 4, 4))
+# 
+# # plot_margin <- c(-0.2, 0.2)
+# plot(density(mcmcw.post_samples_phi_11), col = "royalblue", lty = 2, lwd = 1.5, 
+#      main = "phi_11")#, 
+#      # xlim = c(Phi[1,1] + plot_margin))
+# lines(density(rvgaw.post_samples_phi_11), col = "red", lty = 2, lwd = 1.5,)
+# lines(density(hmc.post_samples_Phi[,,1]), col = "skyblue", lwd = 1.5,)
+# # lines(density(mcmcw1.post_samples_phi), col = "green")
+# # abline(v = Phi[1,1], lty = 2)
+# legend("topright", legend = c("MCMCW", "R-VGAW", "HMC"), col = c("blue", "red", "forestgreen"),
+#        lty = c(2,2,1), cex = 0.7)
+# 
+# # plot(density(mcmcw.post_samples_phi_12), col = "royalblue", lty = 2, lwd = 1.5,
+# #      main = "phi_12", 
+# #      xlim = c(Phi[1,2] + plot_margin))
+# # lines(density(rvgaw.post_samples_phi_12), col = "red", lty = 2, lwd = 1.5,)
+# # lines(density(hmc.post_samples_Phi[,,3]), col = "skyblue", lwd = 1.5,)
+# # abline(v = Phi[1,2], lty = 2)
+# # 
+# # plot(density(mcmcw.post_samples_phi_21), col = "royalblue", lty = 2, lwd = 1.5, 
+# #      main = "phi_21", 
+# #      xlim = c(Phi[2,1] + plot_margin))
+# # lines(density(rvgaw.post_samples_phi_21), col = "red", lty = 2, lwd = 1.5)
+# # lines(density(hmc.post_samples_Phi[,,2]), col = "skyblue", lwd = 1.5)
+# # abline(v = Phi[2,1], lty = 2)
+# 
+# plot(density(mcmcw.post_samples_phi_22), col = "royalblue", lty = 2, lwd = 1.5, 
+#      main = "phi_22")#, 
+#      # xlim = c(Phi[2,2] + plot_margin))
+# lines(density(rvgaw.post_samples_phi_22), col = "red", lty = 2, lwd = 1.5)
+# lines(density(hmc.post_samples_Phi[,,4]), col = "skyblue", lwd = 1.5)
+# 
+# plot_margin <- c(-0.2, 0.2)
+# plot(density(mcmcw.post_samples_sigma_eta_11), col = "royalblue", lty = 2, lwd = 1.5,
+#      main = "sigma_eta_11")
+# lines(density(rvgaw.post_samples_sigma_eta_11), col = "red", lty = 2, lwd = 1.5)
+# lines(density(hmc.post_samples_Sigma_eta[,,1]), col = "skyblue", lwd = 1.5)
+# # lines(density(mcmcw1.post_samples_sigma_eta2), col = "green")
+# 
+# if (use_cholesky) {
+#   plot(density(mcmcw.post_samples_sigma_eta_12), col = "royalblue", lty = 2, lwd = 1.5,
+#        main = "sigma_eta_12")
+#   lines(density(rvgaw.post_samples_sigma_eta_12), col = "red", lty = 2, lwd = 1.5)
+#   lines(density(hmc.post_samples_Sigma_eta[,,3]), col = "skyblue", lwd = 1.5)
+# 
+#   # plot(density(mcmcw.post_samples_sigma_eta_21), col = "royalblue", lty = 2, lwd = 1.5,
+#   #      main = "sigma_eta_21", xlim = c(Sigma_eta[2,1] + plot_margin))
+#   # lines(density(rvgaw.post_samples_sigma_eta_21), col = "red", lty = 2, lwd = 1.5)
+#   # lines(density(hmc.post_samples_Sigma_eta[,,2]), col = "skyblue", lwd = 1.5)
+#   # abline(v = Sigma_eta[2,1], lty = 2)
+# }
+# 
+# plot(density(mcmcw.post_samples_sigma_eta_22), col = "royalblue", lty = 2, lwd = 1.5, 
+#      main = "sigma_eta_22")
+# lines(density(rvgaw.post_samples_sigma_eta_22), col = "red", lty = 2, lwd = 1.5)
+# lines(density(hmc.post_samples_Sigma_eta[,,4]), col = "skyblue", lwd = 1.5)
 
-plot(density(mcmcw.post_samples_phi_22), col = "blue", lty = 2, lwd = 1.5, 
-     main = "phi_22")#, 
-     # xlim = c(Phi[2,2] + plot_margin))
-lines(density(rvgaw.post_samples_phi_22), col = "red", lty = 2, lwd = 1.5)
-lines(density(hmc.post_samples_Phi[,,4]), col = "forestgreen", lwd = 1.5)
+## Plot posterior estimates
+indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
+hmc_indices <- diag(matrix(1:d^2, d, d, byrow = T))
+par(mfrow = c(d+1,d))
 
-plot_margin <- c(-0.2, 0.2)
-plot(density(mcmcw.post_samples_sigma_eta_11), col = "blue", lty = 2, lwd = 1.5,
-     main = "sigma_eta_11")
-lines(density(rvgaw.post_samples_sigma_eta_11), col = "red", lty = 2, lwd = 1.5)
-lines(density(hmc.post_samples_Sigma_eta[,,1]), col = "forestgreen", lwd = 1.5)
-# lines(density(mcmcw1.post_samples_sigma_eta2), col = "green")
-
-if (use_cholesky) {
-  plot(density(mcmcw.post_samples_sigma_eta_12), col = "blue", lty = 2, lwd = 1.5,
-       main = "sigma_eta_12")
-  lines(density(rvgaw.post_samples_sigma_eta_12), col = "red", lty = 2, lwd = 1.5)
-  lines(density(hmc.post_samples_Sigma_eta[,,3]), col = "forestgreen", lwd = 1.5)
-
-  # plot(density(mcmcw.post_samples_sigma_eta_21), col = "blue", lty = 2, lwd = 1.5,
-  #      main = "sigma_eta_21", xlim = c(Sigma_eta[2,1] + plot_margin))
-  # lines(density(rvgaw.post_samples_sigma_eta_21), col = "red", lty = 2, lwd = 1.5)
-  # lines(density(hmc.post_samples_Sigma_eta[,,2]), col = "forestgreen", lwd = 1.5)
-  # abline(v = Sigma_eta[2,1], lty = 2)
+### Posterior of diagonal entries of Phi  
+for (k in 1:d) {    
+  rvgaw.post_samples_phi <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[k,k]))
+  mcmcw.post_samples_phi <- unlist(lapply(mcmcw.post_samples_Phi, function(x) x[k,k]))
+  # hmc.post_samples_phi <- unlist(lapply(hmc.post_samples_Phi, function(x) x[k,k]))
+  
+  ind <- paste0(k,k)
+  plot(density(rvgaw.post_samples_phi), col = "red", lty = 2, 
+       main = bquote(phi[.(ind)]))
+  lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 2)
+  # lines(density(hmc.post_samples_phi), col = "skyblue")
+  
+  lines(density(hmc.post_samples_Phi[,,hmc_indices[k]]), col = "skyblue")
+  # abline(v = Phi[k,k], lty = 2)
+  # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
+  #        lty = c(2,2,1), cex = 0.7)
 }
 
-plot(density(mcmcw.post_samples_sigma_eta_22), col = "blue", lty = 2, lwd = 1.5, 
-     main = "sigma_eta_22")
-lines(density(rvgaw.post_samples_sigma_eta_22), col = "red", lty = 2, lwd = 1.5)
-lines(density(hmc.post_samples_Sigma_eta[,,4]), col = "forestgreen", lwd = 1.5)
+### Posterior of Sigma_eta
+# par(mfrow = c(1,d))
+hmc_indices <- c(matrix(1:(d^2), d, d)) #c(1,5,9)
+# for (k in 1:d) {
+for (k in 1:nrow(indices)) {
+  i <- indices[k, 1]
+  j <- indices[k, 2]
+  
+  rvgaw.post_samples_sigma_eta <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[i,j]))
+  mcmcw.post_samples_sigma_eta <- unlist(lapply(mcmcw.post_samples_Sigma_eta, function(x) x[i,j]))
+  
+  ind <- paste0(i,j)
+  plot(density(rvgaw.post_samples_sigma_eta), col = "red", lty = 2,
+       main = bquote(sigma_eta[.(ind)]))
+  lines(density(mcmcw.post_samples_sigma_eta), col = "royalblue", lty = 2)
+  lines(density(hmc.post_samples_Sigma_eta[,,hmc_indices[k]]), col = "skyblue")
+  # abline(v = Sigma_eta[i,j], lty = 2)
+  # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
+  #        lty = c(2,2,1), cex = 0.3, y.intersp = 0.25)
+}
 
+if (plot_trajectories) {
+  ## Parameter trajectories
+  par(mfrow = c(2,3))
+  trajectories <- list()
+  for (p in 1:param_dim) {
+    trajectories[[p]] <- sapply(rvgaw_results$mu, function(e) e[p])
+    plot(trajectories[[p]], type = "l", xlab = "Iteration", ylab = "param", main = "")
+  }
+}
 
+if (save_plots) {
+  plot_file <- paste0("svreal_posterior_", d, "d", "_", nobs, "obs", temper_info, reorder_info,
+                      "_", date, ".png")
+  filepath = paste0("./plots/", plot_file)
+  png(filepath, width = 600, height = 800)
+  
+  ## Plot posterior estimates
+  indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
+  hmc_indices <- diag(matrix(1:d^2, d, d, byrow = T))
+  par(mfrow = c(d+1,d))
+  
+  ### Posterior of diagonal entries of Phi  
+  for (k in 1:d) {    
+    rvgaw.post_samples_phi <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[k,k]))
+    mcmcw.post_samples_phi <- unlist(lapply(mcmcw.post_samples_Phi, function(x) x[k,k]))
+    # hmc.post_samples_phi <- unlist(lapply(hmc.post_samples_Phi, function(x) x[k,k]))
+    
+    ind <- paste0(k,k)
+    plot(density(rvgaw.post_samples_phi), col = "red", lty = 2, 
+         main = bquote(phi[.(ind)]))
+    lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 2)
+    # lines(density(hmc.post_samples_phi), col = "skyblue")
+    
+    lines(density(hmc.post_samples_Phi[,,hmc_indices[k]]), col = "skyblue")
+    # abline(v = Phi[k,k], lty = 2)
+    # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
+    #        lty = c(2,2,1), cex = 0.7)
+  }
+  
+  ### Posterior of Sigma_eta
+  # par(mfrow = c(1,d))
+  hmc_indices <- c(matrix(1:(d^2), d, d)) #c(1,5,9)
+  # for (k in 1:d) {
+  for (k in 1:nrow(indices)) {
+    i <- indices[k, 1]
+    j <- indices[k, 2]
+    
+    rvgaw.post_samples_sigma_eta <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[i,j]))
+    mcmcw.post_samples_sigma_eta <- unlist(lapply(mcmcw.post_samples_Sigma_eta, function(x) x[i,j]))
+    
+    ind <- paste0(i,j)
+    plot(density(rvgaw.post_samples_sigma_eta), col = "red", lty = 2,
+         main = bquote(sigma_eta[.(ind)]))
+    lines(density(mcmcw.post_samples_sigma_eta), col = "royalblue", lty = 2)
+    lines(density(hmc.post_samples_Sigma_eta[,,hmc_indices[k]]), col = "skyblue")
+    # abline(v = Sigma_eta[i,j], lty = 2)
+    # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
+    #        lty = c(2,2,1), cex = 0.3, y.intersp = 0.25)
+  }
+  
+  dev.off()
+  
+}

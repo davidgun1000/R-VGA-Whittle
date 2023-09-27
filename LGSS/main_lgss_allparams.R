@@ -7,6 +7,7 @@ library(Deriv)
 library(tensorflow)
 reticulate::use_condaenv("tf2.11", required = TRUE)
 library(keras)
+library(Matrix)
 
 source("./source/run_rvgaw_lgss_tf.R")
 source("./source/run_mcmc_lgss_allparams.R")
@@ -44,10 +45,10 @@ result_directory <- "./results/"
 
 ## Flags
 date <- "20230525"
-regenerate_data <- T
+regenerate_data <- F
 save_data <- F
 
-rerun_rvgaw <- F
+rerun_rvgaw <- T
 rerun_mcmcw <- F
 # rerun_mcmce <- F
 rerun_hmc <- F
@@ -57,10 +58,11 @@ save_mcmcw_results <- F
 save_hmc_results <- F
 
 plot_trajectory <- F
+save_plots <- F
 
 ## R-VGA flags
 use_tempering <- T
-reorder_freq <- T
+reorder_freq <- F
 decreasing <- T
 transform <- "arctanh"
 
@@ -75,16 +77,16 @@ phi <- 0.9
 ## For the result filename
 phi_string <- sub("(\\d+)\\.(\\d+)", "\\1\\2", toString(phi)) ## removes decimal point fron the number
 
-n <- 1000
+n <- 10000
 
 if (regenerate_data) {
   print("Generating data...")
   
   # Generate true process x_0:T
   x <- c()
+  set.seed(2023)
   x0 <- rnorm(1, 0, sqrt(sigma_eta^2 / (1-phi^2)))
   x[1] <- x0
-  set.seed(2023)
   for (t in 2:(n+1)) {
     x[t] <- phi * x[t-1] + rnorm(1, 0, sigma_eta)
   }
@@ -173,6 +175,8 @@ state_ini_var <- 1
 ##                      R-VGA with Whittle likelihood                         ##
 ################################################################################
 
+S <- 100L
+
 if (use_tempering) {
   n_temper <- 10 #0.1 * n
   K <- 10
@@ -195,7 +199,7 @@ if (rerun_rvgaw) {
   rvgaw_results <- run_rvgaw_lgss(y = y, #sigma_eta = sigma_eta, sigma_eps = sigma_eps, 
                                   prior_mean = prior_mean, prior_var = prior_var, 
                                   deriv = "tf", 
-                                  S = 100, use_tempering = use_tempering, 
+                                  S = S, use_tempering = use_tempering, 
                                   reorder_freq = reorder_freq,
                                   decreasing = decreasing, 
                                   n_temper = n_temper,
@@ -309,30 +313,67 @@ hmc.post_samples_eps <- stan_results$draws[,,3]#sqrt(exp(hmc.theta_sigma))
 
 par(mfrow = c(1,3))
 # plot(density(mcmce.post_samples_phi), main = "Posterior of phi", col = "blue")
-plot(density(hmc.post_samples_phi), main = "Posterior of phi", col = "blue")
-lines(density(mcmcw.post_samples_phi), col = "blue", lty = 2)
-lines(density(rvgaw.post_samples_phi), col = "red", lty = 2)
-abline(v = phi, lty = 2)
+plot(density(hmc.post_samples_phi), main = "Posterior of phi", col = "skyblue")
+lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 2, lwd = 2)
+lines(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 2)
+abline(v = phi, lty = 2, lwd = 2)
 legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
-       col = c("blue", "blue", "red"), lty = c(1, 2, 2))
+       col = c("skyblue", "royalblue", "red"), lty = c(1, 2, 2))
 
 # plot(density(mcmce.post_samples_eta), main = "Posterior of sigma_eta", col = "blue")
-plot(density(hmc.post_samples_eta), main = "Posterior of sigma_eta", col = "blue")
-lines(density(mcmcw.post_samples_eta), col = "blue", lty = 2)
-lines(density(rvgaw.post_samples_eta), col = "red", lty = 2)
-abline(v = sigma_eta, lty = 2)
+plot(density(hmc.post_samples_eta), main = "Posterior of sigma_eta", col = "skyblue", lwd = 2)
+lines(density(mcmcw.post_samples_eta), col = "royalblue", lty = 2, lwd = 2)
+lines(density(rvgaw.post_samples_eta), col = "red", lty = 2, lwd = 2)
+abline(v = sigma_eta, lty = 2, lwd = 2)
 legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
-       col = c("blue", "blue", "red"), lty = c(1, 2, 2))
+       col = c("skyblue", "royalblue", "red"), lty = c(1, 2, 2))
 
 # plot(density(mcmce.post_samples_eps), xlim = c(sigma_eps - 0.1, sigma_eps + 0.15),
 #      main = "Posterior of sigma_epsilon", col = "blue")
-plot(density(hmc.post_samples_eps), xlim = c(sigma_eps - 0.1, sigma_eps + 0.15),
-     main = "Posterior of sigma_epsilon", col = "blue")
-lines(density(mcmcw.post_samples_eps), col = "blue", lty = 2)
-lines(density(rvgaw.post_samples_eps), col = "red", lty = 2)
-abline(v = sigma_eps, lty = 2)
+plot(density(hmc.post_samples_eps), xlim = c(sigma_eps - 0.05, sigma_eps + 0.05),
+     main = "Posterior of sigma_epsilon", col = "skyblue", lwd = 2)
+lines(density(mcmcw.post_samples_eps), col = "royalblue", lty = 2, lwd = 2)
+lines(density(rvgaw.post_samples_eps), col = "red", lty = 2, lwd = 2)
+abline(v = sigma_eps, lty = 2, lwd = 2)
 legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
-       col = c("blue", "blue", "red"), lty = c(1, 2, 2))
+       col = c("skyblue", "royalblue", "red"), lty = c(1, 2, 2))
+
+if (save_plots) {
+  plot_file <- paste0("lgss_posterior", temper_info, reorder_info,
+                      "_", date, ".png")
+  filepath = paste0("./plots/", plot_file)
+  png(filepath, width = 900, height = 350)
+  
+  par(mfrow = c(1,3))
+  # plot(density(mcmce.post_samples_phi), main = "Posterior of phi", col = "blue")
+  plot(density(hmc.post_samples_phi), main = "Posterior of phi", col = "skyblue")
+  lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 2, lwd = 2)
+  lines(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 2)
+  abline(v = phi, lty = 2, lwd = 2)
+  legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
+         col = c("skyblue", "royalblue", "red"), lty = c(1, 2, 2))
+  
+  # plot(density(mcmce.post_samples_eta), main = "Posterior of sigma_eta", col = "blue")
+  plot(density(hmc.post_samples_eta), main = "Posterior of sigma_eta", col = "skyblue", lwd = 2)
+  lines(density(mcmcw.post_samples_eta), col = "royalblue", lty = 2, lwd = 2)
+  lines(density(rvgaw.post_samples_eta), col = "red", lty = 2, lwd = 2)
+  abline(v = sigma_eta, lty = 2, lwd = 2)
+  legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
+         col = c("skyblue", "royalblue", "red"), lty = c(1, 2, 2))
+  
+  # plot(density(mcmce.post_samples_eps), xlim = c(sigma_eps - 0.1, sigma_eps + 0.15),
+  #      main = "Posterior of sigma_epsilon", col = "blue")
+  plot(density(hmc.post_samples_eps), xlim = c(sigma_eps - 0.1, sigma_eps + 0.1),
+       main = "Posterior of sigma_epsilon", col = "skyblue", lwd = 2)
+  lines(density(mcmcw.post_samples_eps), col = "royalblue", lty = 2, lwd = 2)
+  lines(density(rvgaw.post_samples_eps), col = "red", lty = 2, lwd = 2)
+  abline(v = sigma_eps, lty = 2, lwd = 2)
+  legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
+         col = c("skyblue", "royalblue", "red"), lty = c(1, 2, 2))
+  
+  dev.off()
+} 
+
 
 # ## Trajectories
 if (transform == "arctanh") {

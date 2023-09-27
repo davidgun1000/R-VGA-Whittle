@@ -36,6 +36,28 @@ functions {
     return C;
   }
   
+  matrix to_lowertri(vector x, int d) {
+    int pos = 1;
+    matrix[d, d] L;
+    vector[num_elements(x) - d] lower_entries;
+    // for (i in 2:d) {
+    //   for (j in 1:(i-1)) {
+    //     L[i,j] = x[pos]
+    //     pos = pos + 1
+    //   }
+    // }
+    L = diag_matrix(exp(x[1:d])); // the first d elements form the diagonal entries
+    lower_entries = x[(d+1):num_elements(x)];
+    
+    for (i in 2:d) {
+      for (j in 1:(i-1)) {
+        L[i, j] = lower_entries[pos];
+        pos += 1;
+      }
+    }
+    return L;
+  }
+  
   matrix arima_stationary_cov2(matrix T, matrix R) {
     matrix[rows(T), cols(T)] Q0;
     matrix[rows(T) * rows(T), rows(T) * rows(T)] TT;
@@ -94,7 +116,7 @@ data {
   int d;    // dimension of the data at time t
   int<lower=0> Tfin;   // time points (equally spaced)
   matrix[Tfin, d] Y;
-  int<lower = 0, upper = 1> use_chol;
+  // int<lower = 0, upper = 1> use_chol;
   //matrix[d, Tfin] X;
   // int<lower = 0> num_L; // number of lower triangular elements
   // 
@@ -128,15 +150,12 @@ transformed parameters { // define the mapping from A to Phi here
   //cholesky_factor_cov[d] L;
   matrix[d,d] L;
   
-  // if (use_chol == 1) {
-    L = diag_matrix(exp(gamma[1:d]));
-    // L = diag_matrix(rep_vector(1, d));
-    L[2,1] = gamma[d+1];
-    Sigma_eta_mat = L*L';
-  // } else {
-  //   Sigma_eta_mat = diag_matrix(exp(gamma[1:2]));
-  // }
-  
+    // L = diag_matrix(exp(gamma[1:d]));
+    // L[2,1] = gamma[d+1];
+
+  L = to_lowertri(gamma, d);
+  // L = diag_matrix(rep_vector(1, d));
+  Sigma_eta_mat = L*L';
   // Phi_mat = to_VAR1_trans_mat(A, Sigma_eta_mat);
   Phi_mat = diag_matrix(tanh(theta_phi[1:d]));
 }

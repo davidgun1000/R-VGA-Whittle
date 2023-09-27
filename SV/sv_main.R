@@ -47,7 +47,7 @@ date <- "20230918" #"20230626" # the 20230626 version has sigma_eta = 0.7, the 2
 regenerate_data <- F
 save_data <- F
 use_tempering <- T
-reorder_freq <- T
+reorder_freq <- F
 decreasing <- T
 reorder_seed <- 2024
 plot_likelihood_surface <- F
@@ -55,14 +55,15 @@ prior_type <- "prior1"
 
 ## Flags
 rerun_rvgaw <- T
-rerun_mcmcw <- T
+rerun_mcmcw <- F
 # rerun_mcmce <- F
-rerun_hmc <- T
+rerun_hmc <- F
 
-save_rvgaw_results <- T
-save_mcmcw_results <- T
+save_rvgaw_results <- F
+save_mcmcw_results <- F
 # save_mcmce_results <- F
-save_hmc_results <- T
+save_hmc_results <- F
+save_plots <- F
 
 ## Result directory
 result_directory <- paste0("./results/", prior_type, "/")
@@ -74,6 +75,7 @@ phi <- 0.9
 sigma_eta <- sqrt(0.1)
 sigma_eps <- 1
 kappa <- 2
+set.seed(2023)
 x1 <- rnorm(1, mu, sigma_eta^2 / (1 - phi^2))
 n <- 10000
 
@@ -190,8 +192,13 @@ rvgaw_filepath <- paste0(result_directory, "rvga_whittle_results_n", n,
                          "_phi", phi_string, temper_info, reorder_info, "_", date, ".rds")
 
 ## Prior
-prior_mean <- c(0, -1) #rep(0,2)
-prior_var <- diag(c(1, 0.1)) #diag(1, 2)
+if (prior_type == "prior1") {
+  prior_mean <- c(0, -1) #rep(0,2)
+  prior_var <- diag(c(1, 0.1)) #diag(1, 2)
+} else {
+  prior_mean <- c(0, -0) #rep(0,2)
+  prior_var <- diag(c(1, 1)) #diag(1, 2)
+}
 
 prior_theta <- rmvnorm(10000, prior_mean, prior_var)
 prior_phi <- tanh(prior_theta[, 1])
@@ -269,15 +276,15 @@ mcmcw.post_samples_eta <- as.mcmc(mcmcw_results$post_samples$sigma_eta[-(1:burn_
 # 
 # par(mfrow = c(1,2))
 # plot(density(mcmcw.post_samples_phi), main = "Posterior of phi", 
-#      col = "blue", lty = 2, lwd = 1.5)
-# lines(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 1.5)
+#      col = "blue", lty = 2, lwd = 2)
+# lines(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 2)
 # abline(v = phi, lty = 3)
 # legend("topleft", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
 #        col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
 # 
 # plot(density(mcmcw.post_samples_eta), main = "Posterior of sigma_eta", 
-#      col = "blue", lty = 2, lwd = 1.5)
-# lines(density(rvgaw.post_samples_eta), col = "red", lty = 2, lwd = 1.5)
+#      col = "blue", lty = 2, lwd = 2)
+# lines(density(rvgaw.post_samples_eta), col = "red", lty = 2, lwd = 2)
 # abline(v = sigma_eta, lty = 3)
 # legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
 #        col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
@@ -342,19 +349,19 @@ hmc.post_samples_eta <- stan_results$draws[,,2]#sqrt(exp(hmc.theta_sigma))
 
 par(mfrow = c(1,2))
 plot(density(mcmcw.post_samples_phi), main = "Posterior of phi", 
-     col = "blue", lty = 2, lwd = 1.5)
-# lines(density(mcmce.post_samples_phi), col = "blue", lwd = 1.5)
-lines(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 1.5)
-lines(density(hmc.post_samples_phi), col = "forestgreen", lty = 1, lwd = 1.5)
+     col = "royalblue", lty = 2, lwd = 2)
+# lines(density(mcmce.post_samples_phi), col = "blue", lwd = 2)
+lines(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 2)
+lines(density(hmc.post_samples_phi), col = "skyblue", lty = 1, lwd = 2)
 abline(v = phi, lty = 3)
 legend("topleft", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
        col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
 
 plot(density(mcmcw.post_samples_eta), main = "Posterior of sigma_eta", 
-     col = "blue", lty = 2, lwd = 1.5)
-# lines(density(mcmce.post_samples_eta), col = "blue", lwd = 1.5)
-lines(density(rvgaw.post_samples_eta), col = "red", lty = 2, lwd = 1.5)
-lines(density(hmc.post_samples_eta), col = "forestgreen", lty = 1, lwd = 1.5)
+     col = "royalblue", lty = 2, lwd = 2)
+# lines(density(mcmce.post_samples_eta), col = "blue", lwd = 2)
+lines(density(rvgaw.post_samples_eta), col = "red", lty = 2, lwd = 2)
+lines(density(hmc.post_samples_eta), col = "skyblue", lty = 1, lwd = 2)
 abline(v = sigma_eta, lty = 3)
 legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
        col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
@@ -378,3 +385,32 @@ legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
 mean_log_eps2 <- digamma(1/2) + log(2)
 log_kappa2 <- mean(log(y^2)) - mean_log_eps2
 kappa <- sqrt(exp(log_kappa2))
+
+
+if (save_plots) {
+  plot_file <- paste0("sv_posterior_1d", temper_info, reorder_info,
+                      "_", date, ".png")
+  filepath = paste0("./plots/", plot_file)
+  png(filepath, width = 600, height = 350)
+  
+  par(mfrow = c(1,2))
+  plot(density(mcmcw.post_samples_phi), main = "Posterior of phi", 
+       col = "royalblue", lty = 2, lwd = 2)
+  # lines(density(mcmce.post_samples_phi), col = "blue", lwd = 2)
+  lines(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 2)
+  lines(density(hmc.post_samples_phi), col = "skyblue", lty = 1, lwd = 2)
+  abline(v = phi, lty = 3)
+  legend("topleft", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
+         col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
+  
+  plot(density(mcmcw.post_samples_eta), main = "Posterior of sigma_eta", 
+       col = "royalblue", lty = 2, lwd = 2)
+  # lines(density(mcmce.post_samples_eta), col = "blue", lwd = 2)
+  lines(density(rvgaw.post_samples_eta), col = "red", lty = 2, lwd = 2)
+  lines(density(hmc.post_samples_eta), col = "skyblue", lty = 1, lwd = 2)
+  abline(v = sigma_eta, lty = 3)
+  legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
+         col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
+  
+  dev.off()
+}

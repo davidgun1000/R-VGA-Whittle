@@ -4,8 +4,9 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
   
   mcmc.t1 <- proc.time()
   
-  d <- as.integer(nrow(Y))
-  Tfin <- ncol(Y)
+  Y <- data
+  d <- as.integer(ncol(Y))
+  Tfin <- as.integer(nrow(Y))
   
   if (use_cholesky) {
     param_dim <- d + (d*(d-1)/2 + d) # m^2 AR parameters, 
@@ -33,8 +34,8 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
   freq <- 2 * pi * k_in_likelihood / Tfin
   
   ## astsa package
-  Z <- log(Y^2) - rowMeans(log(Y^2))
-  fft_out <- mvspec(t(Z), detrend = F, plot = F)
+  Z <- log(Y^2) - colMeans(log(Y^2))
+  fft_out <- mvspec(Z, detrend = F, plot = F)
   I <- fft_out$fxx
   
   ## Initial values: sample params from prior
@@ -47,9 +48,11 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
   
   ### the last 3 will be used to construct L
   if (use_cholesky) {
-    L <- diag(exp(theta_curr[(d+1):(length(theta_curr) - 1)]))
-    L[2,1] <- theta_curr[length(theta_curr)]
-    Sigma_eta_curr <- L %*% t(L)
+    # L <- diag(exp(theta_curr[(d+1):(length(theta_curr) - 1)]))
+    # L[2,1] <- theta_curr[length(theta_curr)]
+    # Sigma_eta_curr <- L %*% t(L)
+    
+    Sigma_eta_curr <- construct_Sigma_eta(theta_curr, d, use_cholesky)
   } else {
     Sigma_eta_curr <- diag(exp(theta_curr[(d^2+1):param_dim]))
   }
@@ -98,9 +101,11 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
     
     if (use_cholesky) {
       ### the last 3 will be used to construct L
-      L <- diag(exp(theta_prop[(d+1):(length(theta_prop) - 1)]))
-      L[2,1] <- theta_prop[length(theta_prop)]
-      Sigma_eta_prop <- L %*% t(L)
+      # L <- diag(exp(theta_prop[(d+1):(length(theta_prop) - 1)]))
+      # L[2,1] <- theta_prop[length(theta_prop)]
+      # Sigma_eta_prop <- L %*% t(L)
+      
+      Sigma_eta_prop <- construct_Sigma_eta(theta_prop, d, use_cholesky)
     } else {
       Sigma_eta_prop <- diag(exp(theta_prop[(d^2+1):param_dim]))
     }

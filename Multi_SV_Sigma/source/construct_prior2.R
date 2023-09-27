@@ -2,7 +2,7 @@ construct_prior <- function(data, prior_type = "prior1",
                             use_cholesky = F, byrow = T) {
   
   Y <- data
-  m <- nrow(Y) # dimension of VAR_m(p)
+  m <- ncol(Y) # dimension of VAR_m(p)
   # L_elements <- rnorm(m*(m-1)/2, 0, sqrt(0.1))
   
   if (use_cholesky) {

@@ -60,7 +60,7 @@ run_mcmc_sv <- function(y, #sigma_eta, sigma_xi,
   
   for (i in 1:iters) {
     
-    cat("i =", i, "\n")
+    # cat("i =", i, "\n")
     
     ## 1. Propose new parameter values
     theta_prop <- rmvnorm(1, theta_curr, D)

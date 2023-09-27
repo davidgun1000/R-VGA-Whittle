@@ -22,6 +22,7 @@ source("./source/run_mcmc_sv.R")
 source("./source/compute_whittle_likelihood_sv.R")
 source("./source/construct_prior2.R")
 source("./source/map_functions.R")
+source("./source/index_functions.R")
 # source("./archived/compute_partial_whittle_likelihood.R")
 source("./source/compute_grad_hessian.R")
 
@@ -46,26 +47,26 @@ if (length(gpus) > 0) {
 }
 
 ## Flags
-date <- "20230918"
+date <- "20230920"
 regenerate_data <- T
 save_data <- T
 use_cholesky <- T # use lower Cholesky factor to parameterise Sigma_eta
 prior_type <- "prior1"
 use_heaps_mapping <- F
-plot_likelihood_surface <- F
+plot_likelihood_surface <- T
 plot_prior_samples <- F
 
 rerun_rvgaw <- T
-rerun_mcmcw <- F
-rerun_hmc <- F
+rerun_mcmcw <- T
+rerun_hmc <- T
 
-save_rvgaw_results <- F
-save_mcmcw_results <- F
-save_hmc_results <- F
+save_rvgaw_results <- T
+save_mcmcw_results <- T
+save_hmc_results <- T
 
 ## R-VGAW flags
 use_tempering <- T
-reorder_freq <- T
+reorder_freq <- F
 decreasing <- T
 
 ## Result directory
@@ -78,59 +79,59 @@ result_directory <- paste0("./results/", prior_type, "/")
 dataset <- "5" 
 
 Tfin <- 10000
+d <- 2L
+
 if (regenerate_data) {
   
-  sigma_eta1 <- sqrt(0.2)#0.1
-  sigma_eta2 <- sqrt(0.1) #0.05
-  Sigma_eta <- diag(c(sigma_eta1^2, sigma_eta2^2))
+  # sigma_eta1 <- sqrt(0.2)#0.1
+  # sigma_eta2 <- sqrt(0.1) #0.05
+  # Sigma_eta <- diag(c(sigma_eta1^2, sigma_eta2^2))
+  # 
+  # sigma_eps1 <- 1 #0.01
+  # sigma_eps2 <- 1 #0.02
+  # 
+  # Sigma_eps <- diag(c(sigma_eps1, sigma_eps2))
   
-  sigma_eps1 <- 1 #0.01
-  sigma_eps2 <- 1 #0.02
-  
-  Sigma_eps <- diag(c(sigma_eps1, sigma_eps2))
+  Phi <- diag(0.1*c(9:(9-d+1)))
+  Sigma_eps <- diag(d)
   
   if (dataset == "0") {
-    Phi <- diag(c(0.9, 0.9))  
-  } else if (dataset == "2") {
-    Phi <- matrix(c(-0.7, 0.4, 0.9, 0.7), 2, 2, byrow = T)
-  } else if (dataset == "3") {
-    phi11 <- 0.9 #0.9
-    phi12 <- 0.3 #0.1 # dataset1: 0.1, dataset2 : -0.5
-    phi21 <- 0#.4 #0.2 # dataset1: 0.2, dataset2 : -0.1
-    phi22 <- 0.9 #0.7
-    Phi <- matrix(c(phi11, phi12, phi21, phi22), 2, 2, byrow = T)
-  } else if (dataset == "4") {
-    Phi <- matrix(c(-0.9, 0.8, -0.2, -0.4), 2, 2, byrow = T)
-  } else if (dataset == "5") {
-    Phi <- diag(c(0.9, 0.8))
-    # phi11 <- 0.9 #0.9
-    # phi12 <- 0.3 #0.1 # dataset1: 0.1, dataset2 : -0.5
-    # phi21 <- 0#.4 #0.2 # dataset1: 0.2, dataset2 : -0.1
-    # phi22 <- 0.7 #0.7
-    # Phi <- matrix(c(phi11, phi12, phi21, phi22), 2, 2, byrow = T)
-    Sigma_eta[1,2] <- 0.05
-    Sigma_eta[2,1] <- Sigma_eta[1,2]
+    Sigma_eta <- diag(0.1*(1:d))
     
-  }
-  
-  else { # generate a random Phi matrix
-    d <- 2
+  # } else if (dataset == "2") {
+  #   Phi <- matrix(c(-0.7, 0.4, 0.9, 0.7), 2, 2, byrow = T)
+  # } else if (dataset == "3") {
+  #   phi11 <- 0.9 #0.9
+  #   phi12 <- 0.3 #0.1 # dataset1: 0.1, dataset2 : -0.5
+  #   phi21 <- 0#.4 #0.2 # dataset1: 0.2, dataset2 : -0.1
+  #   phi22 <- 0.9 #0.7
+  #   Phi <- matrix(c(phi11, phi12, phi21, phi22), 2, 2, byrow = T)
+  # } else if (dataset == "4") {
+  #   Phi <- matrix(c(-0.9, 0.8, -0.2, -0.4), 2, 2, byrow = T)
+  } else if (dataset == "5") {
+    # Phi <- diag(c(0.9, 0.8))
+    nlower <- d*(d-1)/2
+    Sigma_eta <- diag(0.1*(1:d))
+    Sigma_eta[lower.tri(Sigma_eta)] <- 0.05*(1:nlower)
+    Sigma_eta[upper.tri(Sigma_eta)] <- t(Sigma_eta[lower.tri(Sigma_eta)])
+    
+  }  else { # generate a random Phi matrix
     A <- matrix(rnorm(d^2), d, d)
     Phi <- backward_map(A, Sigma_eta)
     Phi <- round(Phi, digits = 1)
     print(Phi)
   }
   
-  x1 <- c(0, 0)
-  X <- matrix(NA, nrow = length(x1), ncol = Tfin+1) # x_0:T
-  X[, 1] <- x1
-  Y <- matrix(NA, nrow = length(x1), ncol = Tfin) # y_1:T
+  x1 <- rep(0, d)
+  X <- matrix(NA, nrow = Tfin+1, ncol = d) # x_0:T
+  X[1, ] <- t(x1)
+  Y <- matrix(NA, nrow = Tfin, ncol = d) # y_1:T
   # Y[, 1] <- V %*% t(rmvnorm(1, c(0, 0), Sigma_eps))
   set.seed(2023)
   for (t in 1:Tfin) {
-    X[, t+1] <- Phi %*% X[, t] + t(rmvnorm(1, c(0, 0), Sigma_eta))
-    V <- diag(exp(X[, t+1]/2))
-    Y[, t] <- V %*% t(rmvnorm(1, c(0, 0), Sigma_eps))
+    X[t+1, ] <- Phi %*% X[t, ] + t(rmvnorm(1, rep(0, d), Sigma_eta))
+    V <- diag(exp(X[t+1, ]/2))
+    Y[t, ] <- V %*% t(rmvnorm(1, rep(0, d), Sigma_eps))
   }
   
   multi_sv_data <- list(X = X, Y = Y, Phi = Phi, Sigma_eta = Sigma_eta, 
@@ -149,13 +150,13 @@ if (regenerate_data) {
   Sigma_eps <- multi_sv_data$Sigma_eps
 }
 
-par(mfrow = c(2,1))
+par(mfrow = c(d,1))
 # plot(X[1, ], type = "l")
 # plot(X[2, ], type = "l")
 # 
-# plot(Y[1, ], type = "l")
-# plot(Y[2, ], type = "l")
-
+for (k in 1:d) {
+  plot(Y[, k], type = "l")
+}
 # par(mfrow = c(1,2))
 # hist(Y[1,])
 # hist(Y[2,])
@@ -171,7 +172,8 @@ prior <- construct_prior(data = Y, prior_type = prior_type, use_cholesky = use_c
 prior_mean <- prior$prior_mean
 prior_var <- prior$prior_var
 
-d <- nrow(Y)
+d <- as.integer(ncol(Y))
+Tfin <- as.integer(nrow(Y))
 param_dim <- length(prior_mean)
 
 if (plot_prior_samples) {
@@ -271,28 +273,27 @@ if (plot_likelihood_surface) {
   freq <- 2 * pi * k_in_likelihood / Tfin
   
   # ## astsa package
-  Z <- log(Y^2) - rowMeans(log(Y^2))
-  fft_out <- mvspec(t(Z), detrend = F, plot = F)
+  Z <- log(Y^2) - colMeans(log(Y^2))
+  fft_out <- mvspec(Z, detrend = F, plot = F)
   # fft_out <- mvspec(t(X), detrend = F, plot = F)
   I_all <- fft_out$fxx
-  
   # params <- c(t(Phi), diag(Sigma_eta))
   
   llhs <- list()
-  d <- nrow(Phi)
+  # d <- nrow(Phi)
   indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
   
-  par(mfrow = c(4,2))
-  for (r in 1:nrow(indices)) {
-    i <- indices[r, 1]
-    j <- indices[r, 2]
+  par(mfrow = c(d,d))
+  for (r in 1:d) {
+    # i <- indices[r, 1]
+    # j <- indices[r, 2]
     
     llh <- c()
     for (q in 1:length(phi_grid)) {
       # Sigma_eta_q <- Sigma_eta
       # Sigma_eta_q[i,j] <- param_grid[q]
       Phi_q <- Phi
-      Phi_q[i,j] <- phi_grid[q]
+      Phi_q[r,r] <- phi_grid[q]
       llh[q] <- compute_whittle_likelihood_multi_sv(Y = Z, fourier_freqs = freq,
                                                     periodogram = I_all,
                                                     params = list(Phi = Phi_q, Sigma_eta = Sigma_eta),
@@ -301,10 +302,10 @@ if (plot_likelihood_surface) {
     
     llhs[[r]] <- llh
     
-    param_index <- paste0(i,j)
+    param_index <- paste0(r,r)
     plot(phi_grid, llhs[[r]], type = "l", main = bquote(phi[.(param_index)]), 
          ylab = "Log likelihood", xlab = "Parameter")
-    abline(v = Phi[i,j], lty = 2)
+    abline(v = Phi[r,r], lty = 2)
     abline(v = phi_grid[which.max(llh)], col = "red", lty = 3)
     legend("bottomleft", legend = c("True param", "arg max (llh)"), 
            col = c("black", "red"), lty = c(2,3), cex = 0.5)
@@ -332,11 +333,11 @@ if (plot_likelihood_surface) {
       
     }
     
-    llhs[[r+d^2]] <- llh
+    llhs[[d+r]] <- llh
     
     param_index <- paste0(i,j)
     if(i == j) {
-      plot(sigma_eta_grid, llhs[[r+d^2]], type = "l", 
+      plot(sigma_eta_grid, llhs[[d+r]], type = "l", 
            # main = expression(sigma_eta[])
            main = bquote(sigma_eta[.(param_index)]),
            ylab = "Log likelihood", xlab = "Parameter")
@@ -345,7 +346,7 @@ if (plot_likelihood_surface) {
       legend("bottomright", legend = c("True param", "arg max (llh)"), 
              col = c("black", "red"), lty = c(2,3), cex = 0.5)
     } else {
-      plot(sigma_eta_grid_offdiag, llhs[[r+d^2]], type = "l", 
+      plot(sigma_eta_grid_offdiag, llhs[[d+r]], type = "l", 
            # main = expression(sigma_eta[])
            main = bquote(sigma_eta[.(param_index)]),
            ylab = "Log likelihood", xlab = "Parameter")
@@ -357,6 +358,7 @@ if (plot_likelihood_surface) {
     }
     
   }
+  browser()
   # par(mfrow = c(1,1))
   # plot(param_grid, llh, type = "l", main = "sigma_eta_22", ylab = "Log likelihood", xlab = "Parameter")
   # abline(v = Sigma_eta[2,2], lty = 2)
@@ -549,7 +551,7 @@ if (rerun_hmc) {
   n_post_samples <- 10000
   burn_in <- 1000
   stan.iters <- n_post_samples + burn_in
-  d <- as.integer(nrow(Y))
+  d <- as.integer(ncol(Y))
   
   use_chol <- 0
   if (use_cholesky) {
@@ -558,16 +560,18 @@ if (rerun_hmc) {
   
   if (use_heaps_mapping) {
     stan_file <- "./source/stan_multi_sv_heaps.stan"
-    multi_sv_data <- list(d = nrow(Y), p = 1, Tfin = ncol(Y), Y = Y,
+    multi_sv_data <- list(d = ncol(Y), p = 1, Tfin = nrow(Y), Y = Y,
                           prior_mean_A = prior_mean[c(1,3,2,4)], diag_prior_var_A = diag(prior_var)[c(1,3,2,4)],
                           prior_mean_gamma = prior_mean[5:7], diag_prior_var_gamma = diag(prior_var)[5:7]
     )
   } else {
     stan_file <- "./source/stan_multi_sv.stan"
-    multi_sv_data <- list(d = d, Tfin = ncol(Y), Y = Y,
-                          prior_mean_Phi = prior_mean[1:d], diag_prior_var_Phi = diag(prior_var)[1:d],
-                          prior_mean_gamma = prior_mean[(d+1):param_dim], diag_prior_var_gamma = diag(prior_var)[(d+1):param_dim],
-                          use_chol = 0)
+    multi_sv_data <- list(d = d, Tfin = Tfin, Y = Y,
+                          prior_mean_Phi = prior_mean[1:d], 
+                          diag_prior_var_Phi = diag(prior_var)[1:d],
+                          prior_mean_gamma = prior_mean[(d+1):param_dim], 
+                          diag_prior_var_gamma = diag(prior_var)[(d+1):param_dim]
+                          )
     
   }
   

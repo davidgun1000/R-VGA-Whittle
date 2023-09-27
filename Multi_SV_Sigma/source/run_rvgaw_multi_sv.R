@@ -5,7 +5,9 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
                                n_post_samples = 10000) {
   rvgaw.t1 <- proc.time()
   
-  d <- nrow(data)
+  Y <- data
+  d <- ncol(Y)
+  
   if (use_cholesky) {
     param_dim <- d + (d*(d-1)/2 + d) # m^2 AR parameters, 
     # m*(m-1)/2 + m parameters from the lower Cholesky factor of Sigma_eta
@@ -26,8 +28,8 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   freq <- 2 * pi * k_in_likelihood / Tfin
   
   # ## astsa package
-  Z <- log(Y^2) - rowMeans(log(Y^2))
-  fft_out <- mvspec(t(Z), detrend = F, plot = F)
+  Z <- log(Y^2) - colMeans(log(Y^2))
+  fft_out <- mvspec(Z, detrend = F, plot = F)
   I <- fft_out$fxx
   
   if (reorder_freq) { # randomise order of frequencies and periodogram components
@@ -123,6 +125,7 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
       
       grads_tf <- tf_out$grad
       hessians_tf <- tf_out$hessian
+      
       E_grad_tf <- tf$reduce_mean(grads_tf, 0L)
       E_hessian_tf <- tf$reduce_mean(hessians_tf, 0L)
       
@@ -186,7 +189,6 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   
   ## Transform samples of A into samples of Phi via the mapping in Ansley and Kohn (1986)
   # post_samples_Phi <- mapply(backward_map, post_samples_A, post_samples_Sigma_eta, SIMPLIFY = F)
-  
   rvgaw.post_samples <- list(Phi = post_samples_Phi,
                              Sigma_eta = post_samples_Sigma_eta)
   
@@ -203,15 +205,20 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   
 }
 
-### the last 3 will be used to construct L
-construct_Sigma_eta <- function(theta, d, use_chol) { #d is the dimension of Sigma_eta
-  L <- diag(exp(theta[(d+1):(length(theta) - 1)]))
-  
-  if (use_chol) {
-    L[2,1] <- theta[length(theta)]
-    Sigma_eta <- L %*% t(L)
-  } else {
-    Sigma_eta <- L
-  }
-  return(Sigma_eta)
-}
+# ### the last 3 will be used to construct L
+# construct_Sigma_eta <- function(theta, d, use_chol) { #d is the dimension of Sigma_eta
+#   nlower <- d*(d-1)/2
+#   L <- diag(exp(theta[(d+1):(2*d)]))
+#   offdiags <- theta[-(1:(2*d))] # off diagonal elements are those after the first 2*d elements
+#   
+#   if (use_chol) {
+#     for (k in 1:nlower) {
+#       ind <- index_to_i_j_rowwise_nodiag(k)
+#       L[ind[1], ind[2]] <- offdiags[k]
+#     }
+#     Sigma_eta <- L %*% t(L)
+#   } else {
+#     Sigma_eta <- L
+#   }
+#   return(Sigma_eta)
+# }
