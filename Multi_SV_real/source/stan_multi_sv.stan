@@ -116,6 +116,7 @@ data {
   int d;    // dimension of the data at time t
   int<lower=0> Tfin;   // time points (equally spaced)
   matrix[Tfin, d] Y;
+  int transform;
   // int<lower = 0, upper = 1> use_chol;
   //matrix[d, Tfin] X;
   // int<lower = 0> num_L; // number of lower triangular elements
@@ -157,7 +158,8 @@ transformed parameters { // define the mapping from A to Phi here
   // L = diag_matrix(rep_vector(1, d));
   Sigma_eta_mat = L*L';
   // Phi_mat = to_VAR1_trans_mat(A, Sigma_eta_mat);
-  Phi_mat = diag_matrix(tanh(theta_phi[1:d]));
+  // Phi_mat = diag_matrix(tanh(theta_phi[1:d]));
+  Phi_mat = transform ? diag_matrix(tanh(theta_phi[1:d])) : diag_matrix(1 / (1+exp(-theta_phi[1:d])));
 }
 model {
   //to_vector(A) ~ multi_normal(prior_mean_A, prior_var_A);

@@ -1,6 +1,6 @@
 run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
                               adapt_proposal = F, use_whittle_likelihood = T,
-                              use_cholesky = F) {
+                              use_cholesky = F, transform = "logit") {
   
   mcmc.t1 <- proc.time()
   
@@ -44,7 +44,11 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
   
   ### the first 4 elements will be used to construct A
   # A_curr <- matrix(theta_curr[1:(d^2)], d, d, byrow = T)
-  Phi_curr <- diag(tanh(theta_curr[1:d]))
+  if (transform == "arctanh") {
+    Phi_curr <- diag(tanh(theta_curr[1:d]))
+  } else {
+    Phi_curr <- diag(1/(1+exp(-theta_curr[1:d])))
+  }
   
   ### the last 3 will be used to construct L
   if (use_cholesky) {
@@ -97,7 +101,12 @@ run_mcmc_multi_sv <- function(data, iters, burn_in, prior_mean, prior_var,
     
     ### the first 4 elements will be used to construct A
     # A_prop <- matrix(theta_prop[1:(d^2)], d, d, byrow = T)
-    Phi_prop <- diag(tanh(theta_prop[1:d]))
+    
+    if (transform == "arctanh") {
+      Phi_prop <- diag(tanh(theta_prop[1:d]))
+    } else {
+      Phi_prop <- diag(1/(1+exp(-theta_prop[1:d])))
+    }
     
     if (use_cholesky) {
       ### the last 3 will be used to construct L

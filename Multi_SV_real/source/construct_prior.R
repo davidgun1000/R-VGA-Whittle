@@ -2,7 +2,7 @@ construct_prior <- function(data, prior_type = "minnesota",
                             use_cholesky = F, byrow = T) {
   
   Y <- data
-  m <- nrow(Y) # dimension of VAR_m(p)
+  m <- ncol(Y) # dimension of VAR_m(p)
   # L_elements <- rnorm(m*(m-1)/2, 0, sqrt(0.1))
   
   if (use_cholesky) {
@@ -21,7 +21,7 @@ construct_prior <- function(data, prior_type = "minnesota",
     sigma2_estimates <- c()
     
     for (i in 1:m) {
-      ar_out <- arima(Y[i, ], order = c(1, 0, 0))
+      ar_out <- arima(Y[, i], order = c(1, 0, 0))
       sigma2_estimates[i] <- ar_out$sigma2
     }
     # ar_out1 <- arima(Y[1, ], order = c(1, 0, 0))

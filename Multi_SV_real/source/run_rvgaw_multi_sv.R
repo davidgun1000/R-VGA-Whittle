@@ -1,8 +1,11 @@
 run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
-                               use_tempering = T, temper_schedule, 
+                               use_tempering = T, temper_first = T,
+                               temper_schedule, 
                                reorder_freq = T, decreasing = T,
                                reorder_seed = 2023, use_cholesky = F,
-                               n_post_samples = 10000) {
+                               transform = "logit",
+                               n_post_samples = 10000,
+                               use_median = F, use_welch = F) {
   rvgaw.t1 <- proc.time()
   
   Y <- data
@@ -32,27 +35,63 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   Z <- log(Y^2) - colMeans(log(Y^2))
   fft_out <- mvspec(Z, detrend = F, plot = F)
   I <- fft_out$fxx
-  
-  if (reorder_freq) { # randomise order of frequencies and periodogram components
-    
-    if (decreasing) {
-      sorted_freq <- sort(freq, decreasing = T, index.return = T)
-      indices <- sorted_freq$ix
-      reordered_freq <- sorted_freq$x
-      reordered_I <- I[,,indices]
-    } else {
-      set.seed(reorder_seed)
-      indices <- sample(1:length(freq), length(freq))
-      reordered_freq <- freq[indices]
-      reordered_I <- I[,,indices]
+
+test <- sapply(1:dim(I)[3], function(x) I[,,x][1,1]) # extract periodogram elements
+test22 <- sapply(1:dim(I)[3], function(x) I[,,x][2,2]) # extract periodogram elements
+test21 <- sapply(1:dim(I)[3], function(x) I[,,x][2,2]) # extract periodogram elements
+
+  if (use_welch) {
+    ## Try Welch's method here?
+    n_segments <- 10
+    seg_length <- Tfin/n_segments
+    # split the vector by length 
+    seg_ind <- split(1:Tfin,ceiling(seq_along(1:Tfin) / seg_length))
+    seg_period <- list()
+    for (q in 1:n_segments) {
+      fft_output <- mvspec(Z[seg_ind[[q]], ], detrend = F, plot = F)
+      seg_fxx <- fft_output$fxx
+      
+      seg_period_scaled <- apply(seg_fxx, 3, calc_periodogram, simplify = F) # have to code up own determinant function here
+      seg_period[[q]] <- lapply(seg_period_scaled, function(x) 1/seg_length * x)
+      
+      # Find the squared determinant for each matrix 1st to 500th
+      # then divide by seg_lengthQ
     }
     
-    # plot(reordered_freq, type = "l")
-    # lines(freq, col = "red")
-    freq <- reordered_freq
-    I <- reordered_I 
   }
   
+
+  if (reorder == "decreasing") {
+    sorted_freq <- sort(freq, decreasing = T, index.return = T)
+    indices <- sorted_freq$ix
+    reordered_freq <- sorted_freq$x
+    reordered_I <- I[,,indices]
+  } else if (reorder == "random") {
+    set.seed(reorder_seed)
+    indices <- sample(1:length(freq), length(freq))
+    reordered_freq <- freq[indices]
+    reordered_I <- I[,,indices]
+  } else if (reorder > 0) {
+    n_reorder <- reorder
+    original <- (n_reorder+1):length(freq)
+    inds <- ceiling(seq(n_reorder, length(freq) - n_reorder, length.out = n_reorder))
+    new <- original
+    for (j in 1:n_reorder) {
+      new <- append(new, j, after = inds[j])
+    }
+    
+    reordered_freq <- freq[new]
+    reordered_I <- I[,,new]
+  } else { ## do nothing
+    reordered_freq <- freq
+    reordered_I <- I
+  }
+    
+  freq <- reordered_freq
+  I <- reordered_I 
+  browser()
+  test1 <- sapply(1:length(freq), function(i) I[,,i][1,1])
+  test2 <- sapply(1:length(freq), function(i) I[,,i][2,2])
   #### TF starts ##########
   # j <- 1
   # samples_tf <- tf$Variable(samples)
@@ -75,9 +114,18 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
     # cat("i =", i, "\n")
     a_vals <- 1
     if (use_tempering) {
-      if (i <= n_temper) { # only temper the first n_temper observations
-        a_vals <- temper_schedule
+      if (temper_first) {
+        if (i <= n_temper) { # only temper the first n_temper observations
+          cat("Damping the first ", n_temper, "frequencies...")
+          a_vals <- temper_schedule
+        }  
+      } else {
+        if (i > length(freq) - n_temper) { # only temper the first n_temper observations
+        cat("Damping the last ", n_temper, "frequencies...")
+          a_vals <- temper_schedule
+        }
       }
+      
     }
     
     mu_temp <- rvgaw.mu_vals[[i]]
@@ -106,7 +154,8 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
       freq_tf <- tf$Variable(freq[i])
       
       tf_out <- compute_grad_hessian(samples_tf, I_i = I_tf, freq_i = freq_tf,
-                                     use_cholesky = use_cholesky)
+                                     use_cholesky = use_cholesky, 
+                                     transform = transform)
       
       # llh <- list()
       # for (s in 1:S) {
@@ -127,20 +176,28 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
       grads_tf <- tf_out$grad
       hessians_tf <- tf_out$hessian
       
-      E_grad_tf <- tf$reduce_mean(grads_tf, 0L)
-      E_hessian_tf <- tf$reduce_mean(hessians_tf, 0L)
-      
+      E_grad_tf <- 0
+      E_hessian_tf <- 0
+      if (use_median) {
+        E_grad_tf <- tfp$stats$percentile(grads_tf, 50, 0L)
+        E_hessian_tf <- tfp$stats$percentile(hessians_tf, 50, 0L)
+      } else {
+        E_grad_tf <- tf$reduce_mean(grads_tf, 0L)
+        E_hessian_tf <- tf$reduce_mean(hessians_tf, 0L)
+      }
+      # browser()
       E_grad <- as.vector(E_grad_tf)
       E_hessian <- as.matrix(E_hessian_tf)
       
       prec_temp <- prec_temp - a * E_hessian
       
+      # prec_temp <- approx_hessian(prec_temp, method = "multiple_id")
       eigvals <- eigen(prec_temp)$value
       if(any(eigvals < 0)) {
         # browser() ## try nearPD() funciton from the Matrix package here
         neg_eigval <- eigvals[eigvals < 0]
         cat("Warning: precision matrix has negative eigenvalue", neg_eigval, "\n")
-        prec_temp <- as.matrix(nearPD(prec_temp)$mat)
+        # prec_temp <- as.matrix(nearPD(prec_temp)$mat)
       }
       
       mu_temp <- mu_temp + chol2inv(chol(prec_temp)) %*% (a * E_grad)
@@ -168,8 +225,12 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   
   ### the first 4 elements will be used to construct A
   # post_samples_A <- lapply(rvgaw.post_samples2, function(x) matrix(x[1:(d^2)], d, d, byrow = T))
-  post_samples_Phi <- lapply(rvgaw.post_samples2, function(x) diag(tanh(x[1:d])))
-  
+  if (transform == "arctanh") {
+    post_samples_Phi <- lapply(rvgaw.post_samples2, function(x) diag(tanh(x[1:d])))
+  } else {
+    post_samples_Phi <- lapply(rvgaw.post_samples2, function(x) diag(1/(1+exp(-x[1:d]))))
+  }
+
   if (use_cholesky) {
     ### the last 3 will be used to construct L
     # construct_Sigma_eta <- function(theta) {
@@ -194,13 +255,16 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
                              Sigma_eta = post_samples_Sigma_eta)
   
   ## Save results
-  rvgaw_results <- list(mu = rvgaw.mu_vals,
+  rvgaw_results <- list(data = Y, 
+                        mu = rvgaw.mu_vals,
                         prec = rvgaw.prec,
                         prior_mean = prior_mean,
                         prior_var = prior_var,
                         post_samples = rvgaw.post_samples,
+                        transform = transform,
                         S = S,
                         use_tempering = use_tempering,
+                        temper_first = temper_first,
                         temper_schedule = a_vals,
                         time_elapsed = rvgaw.t2 - rvgaw.t1)
   
@@ -223,3 +287,30 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
 #   }
 #   return(Sigma_eta)
 # }
+
+approx_hessian <- function(H, method = "flip_neg_eigvals", beta = 0.001) { # or method = "flip_neg_eigvals"
+  eigs = eigen(H)$values #np.linalg.eigvals(H)
+  
+  Hbar <- H
+  if (min(eigs) < 0) { # then use one of two methods to modify H so that it's posdef
+    cat("Warning: precision matrix has negative eigenvalues", eigs[eigs < 0], "\n")
+    if (method == "flip_neg_eigvals") { # flip negative eigvals to positive 
+      print("Flipping eigenvalues...")
+      mod_mat <- H > 0
+      mod_mat[mod_mat==0] = -1
+      Hbar <- H * mod_mat
+      browser()
+    } else if (method == "multiple_id") { # add a multiple of the identity matrix to the hessian
+      print("Inflating diagonal entries of the precision matrix...")
+      tau <- - min(eigs) + beta # beta is the new "minimum eigenvalue"
+      Hbar <- H + diag(nrow(H)) * tau # modifies using multiples of identity
+    }
+  }
+  
+  return(Hbar)
+}
+
+calc_periodogram <- function(M) {
+  crosspd <- M %*% t(Conj(M))
+  return(crosspd)
+}

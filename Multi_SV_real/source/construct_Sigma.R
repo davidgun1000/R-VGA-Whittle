@@ -6,7 +6,7 @@ index_to_i_j_rowwise_nodiag <- function(k) { # maps vector entries to lower tria
   c(i, j)
 }
 
-construct_Sigma_eta <- function(theta, d, use_chol) { #d is the dimension of Sigma_eta
+construct_Sigma_eta <- function(theta, d, use_chol = T) { #d is the dimension of Sigma_eta
   nlower <- d*(d-1)/2
   L <- diag(exp(theta[(d+1):(2*d)]))
   offdiags <- theta[-(1:(2*d))] # off diagonal elements are those after the first 2*d elements
@@ -23,12 +23,14 @@ construct_Sigma_eta <- function(theta, d, use_chol) { #d is the dimension of Sig
   return(Sigma_eta)
 }
 
-to_triangular <- function (x, d) {
+to_triangular <- function (x, d) { ## for stan
   # // could check rows(y) = K * (K + 1) / 2
   # matrix[K, K] y;    
   K = d-1
   pos = 1
-  L = matrix(NA, d, d)
+  nlower = d*(d-1)/2
+  # L = matrix(NA, d, d)
+  L = exp(diag(x[1:d]))
   for (i in 2:d) {
     for (j in 1:(i-1)) {
       L[i,j] = x[pos]

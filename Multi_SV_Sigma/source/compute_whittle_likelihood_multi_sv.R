@@ -26,6 +26,7 @@ compute_whittle_likelihood_multi_sv <- function(Y, fourier_freqs, periodogram,
   Phi_0 <- diag(d)
   Phi_1 <- Phi
   Theta <- diag(d)
+  Phi_inv <- NULL
   
   log_likelihood <- 0
   if (use_tensorflow) { # compute the likelihood for all frequencies at once
@@ -83,15 +84,18 @@ compute_whittle_likelihood_multi_sv <- function(Y, fourier_freqs, periodogram,
     }
 
     spec_dens_X <- as.matrix(spec_dens_X_tf) # for the return object
-    
+    spec_dens <- as.matrix(spec_dens_tf)
   } else {
     
+    log_likelihood_parts <- c()
     spec_dens_X <- list()
+    spec_dens <- list()
     
     for (k in 1:length(freq)) {
+      
       Phi_inv <- solve(Phi_0 - Phi_1 * exp(- 1i * freq[k]))
       Phi_inv_H <- Conj(t(Phi_inv))
-      
+     
       # test <- solve(diag(2) - Phi * exp(- 1i * freq[k])) %*% Sigma_eta %*% 
       #   solve(diag(2) - t(Phi) * exp(1i * freq[k]))
       # M <- Phi_0 - Phi_1 * exp(- 1i * freq[k])
@@ -103,26 +107,28 @@ compute_whittle_likelihood_multi_sv <- function(Y, fourier_freqs, periodogram,
       
       spec_dens_Xi <- diag(pi^2/2, d)
       
-      spec_dens <- spec_dens_X[[k]] + spec_dens_Xi  
+      spec_dens_k <- spec_dens_X[[k]] + spec_dens_Xi  
+      spec_dens[[k]] <- spec_dens_k
       
-      part2 <- sum(diag(solve(spec_dens) %*% I[, , k]))
+      part2 <- sum(diag(solve(spec_dens_k) %*% I[, , k]))
       # test <- Conj(t(I[,,k])) %*% solve(spec_dens) %*% I[,,k]
       # part2 <- sum(diag(solve(spec_dens) %*% I_all[[k]]))
       
       # log(det(spec_dens))
       
       if (d == 2) {
-        det_spec_dens <- prod(diag(spec_dens)) - spec_dens[1,2] * spec_dens[2,1]
+        det_spec_dens <- prod(diag(spec_dens_k)) - spec_dens_k[1,2] * spec_dens_k[2,1]
       } else {
-        det_spec_dens <- prod(eigen(spec_dens, only.values = T)$values)
+        det_spec_dens <- prod(eigen(spec_dens_k, only.values = T)$values)
       }
       
       part1 <- log(det_spec_dens)
-      
-      log_likelihood <- log_likelihood - (part1 + part2)
+      log_likelihood_parts[k] <- - (part1 + part2)
+      browser()
       # test <- spec_dens[1, 2] * spec_dens[2, 1] - spec_dens[1, 1] * spec_dens[2, 2]
     }
     
+    log_likelihood <- sum(log_likelihood_parts)
     if (Im(log_likelihood) > 1e-10) { # if imaginary part is non zero
       print("Warning: Imaginary part of the log likelihood is non-zero")
       browser()
@@ -133,7 +139,10 @@ compute_whittle_likelihood_multi_sv <- function(Y, fourier_freqs, periodogram,
     
     
   return(list(log_likelihood = log_likelihood,
-              spec_dens_X = spec_dens_X))
+              log_likelihood_parts = log_likelihood_parts,
+              spec_dens_X = spec_dens_X,
+              spec_dens = spec_dens,
+              Phi_inv = Phi_inv))
   # return(spec_dens_X)
 }
 

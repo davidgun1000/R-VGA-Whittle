@@ -1,6 +1,7 @@
 ## Calculate the gradient and Hessian of the likelihood based on those samples
 compute_grad_hessian <- tf_function(
-  compute_grad_hessian <- function(samples_tf, I_i, freq_i, use_cholesky = F) {
+  compute_grad_hessian <- function(samples_tf, I_i, freq_i, use_cholesky = F,
+                                   transform = "logit") {
     with (tf$GradientTape() %as% tape2, {
       with (tf$GradientTape(persistent = TRUE) %as% tape1, {
         
@@ -15,7 +16,11 @@ compute_grad_hessian <- tf_function(
         
         # A_samples_tf <- samples_tf[, 1:(d^2)]
         # A_samples_tf <- tf$reshape(A_samples_tf, c(dim(A_samples_tf)[1], d, d))
-        Phi_samples_tf <- tf$linalg$diag(tf$math$tanh(samples_tf[, 1:d]))
+        if (transform == "arctanh") {
+          Phi_samples_tf <- tf$linalg$diag(tf$math$tanh(samples_tf[, 1:d]))
+        } else {
+          Phi_samples_tf <- tf$linalg$diag(tf$math$reciprocal(1 + tf$math$exp(-samples_tf[, 1:d])))
+        }
         
         ## Construct Sigma_eta
         if (use_cholesky) {
@@ -98,7 +103,7 @@ compute_grad_hessian <- tf_function(
                 grad = grad_tf,
                 hessian = grad2_tf))
   },
-  reduce_retracing=F
+  reduce_retracing=T
 )
 
 # fill_lower_tri_tf <- tf_function(

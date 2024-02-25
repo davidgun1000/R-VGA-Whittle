@@ -1,12 +1,16 @@
 run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
-                               use_tempering = T, temper_schedule, 
+                               use_tempering = T, temper_first = T,
+                               temper_schedule, 
                                reorder_freq = T, decreasing = T,
                                reorder_seed = 2023, use_cholesky = F,
-                               n_post_samples = 10000) {
+                               transform = "logit",
+                               n_post_samples = 10000,
+                               use_median = F) {
   rvgaw.t1 <- proc.time()
   
   Y <- data
   d <- ncol(Y)
+  Tfin <- nrow(Y)
   
   if (use_cholesky) {
     param_dim <- d + (d*(d-1)/2 + d) # m^2 AR parameters, 
@@ -32,25 +36,41 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   fft_out <- mvspec(Z, detrend = F, plot = F)
   I <- fft_out$fxx
   
-  if (reorder_freq) { # randomise order of frequencies and periodogram components
-    
-    if (decreasing) {
-      sorted_freq <- sort(freq, decreasing = T, index.return = T)
-      indices <- sorted_freq$ix
-      reordered_freq <- sorted_freq$x
-      reordered_I <- I[,,indices]
-    } else {
-      set.seed(reorder_seed)
-      indices <- sample(1:length(freq), length(freq))
-      reordered_freq <- freq[indices]
-      reordered_I <- I[,,indices]
+# test <- sapply(1:dim(I)[3], function(x) I[,,x][1,1]) # extract periodogram elements
+# test22 <- sapply(1:dim(I)[3], function(x) I[,,x][2,2]) # extract periodogram elements
+# test21 <- sapply(1:dim(I)[3], function(x) I[,,x][2,2]) # extract periodogram elements
+
+  if (reorder == "decreasing") {
+    sorted_freq <- sort(freq, decreasing = T, index.return = T)
+    indices <- sorted_freq$ix
+    reordered_freq <- sorted_freq$x
+    reordered_I <- I[,,indices]
+  } else if (reorder == "random") {
+    set.seed(reorder_seed)
+    indices <- sample(1:length(freq), length(freq))
+    reordered_freq <- freq[indices]
+    reordered_I <- I[,,indices]
+  } else if (reorder > 0) {
+    n_reorder <- reorder
+    original <- (n_reorder+1):length(freq)
+    inds <- ceiling(seq(n_reorder, length(freq) - n_reorder, length.out = n_reorder))
+    new <- original
+    for (j in 1:n_reorder) {
+      new <- append(new, j, after = inds[j])
     }
     
-    # plot(reordered_freq, type = "l")
-    # lines(freq, col = "red")
-    freq <- reordered_freq
-    I <- reordered_I 
+    reordered_freq <- freq[new]
+    reordered_I <- I[,,new]
+  } else { ## do nothing
+    reordered_freq <- freq
+    reordered_I <- I
   }
+  
+  freq <- reordered_freq
+  I <- reordered_I 
+  browser()
+  test1 <- sapply(1:length(freq), function(i) I[,,i][1,1])
+  test2 <- sapply(1:length(freq), function(i) I[,,i][2,2])
   
   #### TF starts ##########
   # j <- 1
@@ -74,9 +94,18 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
     # cat("i =", i, "\n")
     a_vals <- 1
     if (use_tempering) {
-      if (i <= n_temper) { # only temper the first n_temper observations
-        a_vals <- temper_schedule
+      if (temper_first) {
+        if (i <= n_temper) { # only temper the first n_temper observations
+          cat("Damping the first", n_temper, "frequencies... \n")
+          a_vals <- temper_schedule
+        }  
+      } else {
+        if (i > length(freq) - n_temper) { # only temper the first n_temper observations
+          cat("Damping the last", n_temper, "frequencies... \n")
+          a_vals <- temper_schedule
+        }
       }
+      
     }
     
     mu_temp <- rvgaw.mu_vals[[i]]
@@ -89,7 +118,6 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
     E_hessian <- 0
     
     for (v in 1:length(a_vals)) { # for each step in the tempering schedule
-      
       a <- a_vals[v]
       
       P <- chol2inv(chol(prec_temp))
@@ -105,7 +133,8 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
       freq_tf <- tf$Variable(freq[i])
       
       tf_out <- compute_grad_hessian(samples_tf, I_i = I_tf, freq_i = freq_tf,
-                                     use_cholesky = use_cholesky)
+                                     use_cholesky = use_cholesky, 
+                                     transform = transform)
       
       # llh <- list()
       # for (s in 1:S) {
@@ -125,14 +154,25 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
       
       grads_tf <- tf_out$grad
       hessians_tf <- tf_out$hessian
-      
-      E_grad_tf <- tf$reduce_mean(grads_tf, 0L)
-      E_hessian_tf <- tf$reduce_mean(hessians_tf, 0L)
-      
+
+      E_grad_tf <- 0
+      E_hessian_tf <- 0
+      if (use_median) {
+        E_grad_tf <- tfp$stats$percentile(grads_tf, 50, 0L)
+        E_hessian_tf <- tfp$stats$percentile(hessians_tf, 50, 0L)
+      } else {
+        E_grad_tf <- tf$reduce_mean(grads_tf, 0L)
+        E_hessian_tf <- tf$reduce_mean(hessians_tf, 0L)
+      }
+      # browser()
       E_grad <- as.vector(E_grad_tf)
       E_hessian <- as.matrix(E_hessian_tf)
       
       prec_temp <- prec_temp - a * E_hessian
+      
+      # if (i == 500) {
+      #   browser()
+      # }
       
       eigvals <- eigen(prec_temp)$value
       if(any(eigvals < 0)) {
@@ -167,8 +207,12 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   
   ### the first 4 elements will be used to construct A
   # post_samples_A <- lapply(rvgaw.post_samples2, function(x) matrix(x[1:(d^2)], d, d, byrow = T))
-  post_samples_Phi <- lapply(rvgaw.post_samples2, function(x) diag(tanh(x[1:d])))
-  
+  if (transform == "arctanh") {
+    post_samples_Phi <- lapply(rvgaw.post_samples2, function(x) diag(tanh(x[1:d])))
+  } else {
+    post_samples_Phi <- lapply(rvgaw.post_samples2, function(x) diag(1/(1+exp(-x[1:d]))))
+  }
+
   if (use_cholesky) {
     ### the last 3 will be used to construct L
     # construct_Sigma_eta <- function(theta) {
@@ -198,8 +242,10 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
                         prior_mean = prior_mean,
                         prior_var = prior_var,
                         post_samples = rvgaw.post_samples,
+                        transform = transform,
                         S = S,
                         use_tempering = use_tempering,
+                        temper_first = temper_first,
                         temper_schedule = a_vals,
                         time_elapsed = rvgaw.t2 - rvgaw.t1)
   

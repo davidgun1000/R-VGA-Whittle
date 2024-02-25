@@ -2,7 +2,7 @@ compute_whittle_likelihood_sv <- function(y, params) {
   n <- length(y)
   phi <- params$phi
   sigma_eta <- params$sigma_eta
-  sigma_xi <- sqrt(pi^2/2) #params$sigma_xi
+  sigma_xi <- params$sigma_xi
   
   ## Compute Whittle likelihood
   y_tilde <- log(y^2) - mean(log(y^2))
@@ -28,8 +28,5 @@ compute_whittle_likelihood_sv <- function(y, params) {
   
   log_whittle <- - sum(part1 + part2)
   
-  return(list(log_likelihood = log_whittle, 
-              spec_dens_x = spectral_dens_x, 
-              periodogram = I_omega[k_in_likelihood + 1] ))
-  # return(spectral_dens_x)
+  return(log_whittle)
 }

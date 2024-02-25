@@ -1,4 +1,4 @@
-run_hmc_multi_sv <- function(data, iters, burn_in) {
+run_hmc_multi_sv <- function(data, transform = "logit", iters, burn_in) {
   
   y <- data
   

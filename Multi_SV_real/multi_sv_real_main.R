@@ -10,8 +10,11 @@ library("astsa")
 library("cmdstanr")
 # library("expm")
 library("stcos")
+library(dplyr)
+reticulate::use_condaenv("myenv", required = TRUE)
 library(tensorflow)
-reticulate::use_condaenv("tf2.11", required = TRUE)
+tfp <- import("tensorflow_probability")
+tfd <- tfp$distributions
 library(keras)
 library(Matrix)
 
@@ -45,57 +48,89 @@ if (length(gpus) > 0) {
 }
 
 ## Flags
-date <- "20230918"
+date <- "20240115_agricfood" #"20230918"
 use_cholesky <- T # use lower Cholesky factor to parameterise Sigma_eta
 # prior_type <- "minnesota"
 use_heaps_mapping <- F
 plot_likelihood_surface <- F
 plot_prior_samples <- F
 plot_trajectories <- F
+plot_trace <- T
+transform <- "arctanh"
+prior_type <- "prior1"
 
+# reread_data <- F
 rerun_rvgaw <- T
-rerun_mcmcw <- T
-rerun_hmc <- T
+rerun_mcmcw <- F
+rerun_hmc <- F
 
 save_rvgaw_results <- T
-save_mcmcw_results <- T
-save_hmc_results <- T
-save_plots <- T
+save_mcmcw_results <- F
+save_hmc_results <- F
+save_plots <- F
 
 ## R-VGAW flags
 use_tempering <- F
 reorder_freq <- T
-decreasing <- T
-
-#######################
-##   Generate data   ##
-#######################
+decreasing <- F
+use_median <- F
 
 #########################
 ##      Read data      ##
 #########################
 
 dataset <- "daily" # daily or monthly
+industries <- c("Agric", "Food")
 nstocks <- 2
-nobs <- 500
+nobs <- 1000
 
-result_directory <- paste0("./results/", dataset, "_", nstocks, "stocks/")
+# result_directory <- paste0("./results/", dataset, "_", nstocks, "stocks/")
+result_directory <- paste0("./results/49_industries/", dataset, "_", nstocks, "stocks/", transform, "/")
 
+# if (reread_data) {
+  if (dataset == "daily") {
+    # returns_data <- read.csv("./data/5_Industry_Portfolios_Daily_cleaned.csv")
+    returns_data <- read.csv("./data/49_Industry_Portfolios_Daily.csv")
+    
+    datafile <- paste0("_daily", nobs)
+    # Y <- returns_data[1:nobs, 2:(2+nstocks-1)]
+    # Y <- returns_data[c("Toys", "Books")]
+    # Y <- returns_data[c("Agric", "BusSv")][1:nobs, ]
+    # Y <- returns_data[c("MedEq", "BusSv")][1:nobs, ]
+    # Y <- returns_data[c("Rtail", "Food")][1:nobs, ]
+    Y <- returns_data[industries][1:nobs, ]
+    
+  } else { # monthly
+    returns_data <- read.csv("./data/5_Industry_Portfolios_cleaned.CSV")
+    datafile <- paste0("_monthly", nobs)
+    Y <- returns_data[1:nobs, 2:(2+nstocks-1)]
+  }
+  
+#   ## Save data?
+#   saveRDS(Y, paste0("./data/data_", paste(industries, collapse = ""), "_", date))
+# } else {
+#   Y <- readRDS(paste0("./data/data_", paste(industries, collapse = ""), "_", date))
+# }
 
-if (dataset == "daily") {
-  returns_data <- read.csv("./data/5_Industry_Portfolios_Daily_cleaned.csv")
-  datafile <- paste0("_daily", nobs)
-  Y <- returns_data[1:nobs, 2:(2+nstocks-1)]
-} else { # monthly
-  returns_data <- read.csv("./data/5_Industry_Portfolios_cleaned.CSV")
-  datafile <- paste0("_monthly", nobs)
-  Y <- returns_data[1:nobs, 2:(2+nstocks-1)]
-}
+# library("dplyr")
+# test <- returns_data %>% select_if(!any(.) == -99.99)
+
+all_data <- returns_data[1:nobs, c("Agric", "Food", "Beer",  "Smoke", 
+                          "Toys", "Fun", "Books", "Hshld", "Clths", "MedEq",
+                          "Drugs", "Chems", "Txtls", "BldMt", "Cnstr", "Steel", 
+                          "Mach", "ElcEq", "Autos", "Aero", "Ships", "Mines", 
+                          "Coal", "Oil", "Util", "Telcm", "BusSv", "Hardw", 
+                          "Chips", "LabEq", "Boxes", "Trans", "Whlsl", "Rtail", 
+                          "Meals", "Banks", "Insur", "RlEst", "Fin", "Other")]
+all_data <- all_data - colMeans(all_data)
+cormat <- cor(all_data)
+
+# Agric and Toys have low correlation (1000 obs)
+# Toys and BusSv have low correlation (2000 obs)
 
 # Y <- returns_data[, 2:4]
 Y_mean_corrected <- Y - colMeans(Y)
 d <- ncol(Y_mean_corrected)
-
 # par(mfrow = c(d, 1))
 # for (c in 1:ncol(Y_mean_corrected)) {
 #   plot(Y_mean_corrected[, c], type = "l")
@@ -109,21 +144,23 @@ d <- ncol(Y_mean_corrected)
 
 
 ## Construct initial distribution/prior
-prior <- construct_prior(data = Y, use_cholesky = use_cholesky)
+prior <- construct_prior(data = Y_mean_corrected, use_cholesky = use_cholesky, prior_type = prior_type)
 prior_mean <- prior$prior_mean
 prior_var <- prior$prior_var
 
 param_dim <- length(prior_mean)
 
 if (plot_prior_samples) {
+  print("Plotting prior samples...")
   ## Sample from the priors here
   # prior_samples <- data.frame(rmvnorm(1000, prior_mean, prior_var))
   # names(prior_samples) <- c("phi_11", "phi_12", "phi_21", "phi_22", "sigma_eta1", "sigma_eta2")
-  prior_samples <- rmvnorm(1000, prior_mean, prior_var)
+  prior_samples <- rmvnorm(10000, prior_mean, prior_var)
   
-  d <- nrow(Phi)
-  indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
-  
+  # d <- nrow(Phi)
+  #indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
+  indices <- data.frame(i = c(1,2,2), j = c(1,2,1))
+
   ### the first 4 elements will be used to construct A
   prior_samples_list <- lapply(seq_len(nrow(prior_samples)), function(i) prior_samples[i,])
   
@@ -142,7 +179,7 @@ if (plot_prior_samples) {
   # }
   # 
   ### the last 3 will be used to construct L
-  construct_Sigma_eta <- function(theta, d) {
+  construct_Sigma_eta2 <- function(theta, d) {
     p <- length(theta)
     L <- diag(exp(theta[(d+1):(p-1)]))
     L[2,1] <- theta[p]
@@ -151,8 +188,9 @@ if (plot_prior_samples) {
     return(Sigma_eta)
   }
   
-  Sigma_eta_prior_samples <- lapply(prior_samples_list, construct_Sigma_eta, d = d)
+  # Sigma_eta_prior_samples <- lapply(prior_samples_list, construct_Sigma_eta, d = d)
   
+  Sigma_eta_prior_samples <- lapply(prior_samples_list, construct_Sigma_eta2, d = d)
   ## Transform samples of A into samples of Phi via the mapping in Ansley and Kohn (1986)
   # Phi_prior_samples <- mapply(backward_map, A_prior_samples, Sigma_eta_prior_samples, SIMPLIFY = F)
   
@@ -177,16 +215,16 @@ if (plot_prior_samples) {
   
   
   # par(mfrow = c(param_dim, param_dim))
-  true_params <- c(diag(Phi), c(t(Sigma_eta)))
-  param_names <- c("phi_11", "phi_22", "sigma_eta11", "sigma_eta12", "sigma_eta21", "sigma_eta2")
+  # true_params <- c(diag(Phi), c(t(Sigma_eta)))
+  param_names <- c("phi_11", "phi_22", "sigma_eta11", "sigma_eta22", "sigma_eta21")
   
-  par(mfrow = c(6,6))
-  for (i in 1:6) {
-    for (j in 1:6) {
+  par(mfrow = c(param_dim, param_dim))
+  for (i in 1:param_dim) {
+    for (j in 1:param_dim) {
       par("mar"=c(4, 4, 2, 2))
       plot(VAR1_prior_samples[[i]], VAR1_prior_samples[[j]], 
            xlab = param_names[i], ylab = param_names[j])
-      points(true_params[i], true_params[j], col = "red", pch = 20)
+      # points(true_params[i], true_params[j], col = "red", pch = 20)
     }
   }
   
@@ -206,19 +244,25 @@ if (plot_likelihood_surface) {
   sigma_eta_grid <- seq(0.01, 0.99, length.out = 100)
   sigma_eta_grid_offdiag <- seq(0.01, 0.15, length.out = 100)
   
-  
+  Tfin <- length(Y_mean_corrected)
   k <- seq(-ceiling(Tfin/2)+1, floor(Tfin/2), 1)
   k_in_likelihood <- k [k >= 1 & k <= floor((Tfin-1)/2)]
   freq <- 2 * pi * k_in_likelihood / Tfin
   
   # ## astsa package
-  Z <- log(Y^2) - rowMeans(log(Y^2))
+  Z <- log(Y_mean_corrected^2) - rowMeans(log(Y_mean_corrected^2))
   fft_out <- mvspec(t(Z), detrend = F, plot = F)
   # fft_out <- mvspec(t(X), detrend = F, plot = F)
   I_all <- fft_out$fxx
-  
+
   # params <- c(t(Phi), diag(Sigma_eta))
-  
+  ## Plot the spectral density
+  # compute_whittle_likelihood_multi_sv(Y = Z, fourier_freqs = freq,
+  #                                     periodogram = I_all,
+  #                                     params = list(Phi = Phi, Sigma_eta = Sigma_eta),
+  #                                     use_tensorflow = T)$log_likelihood
+  browser()
+
   llhs <- list()
   d <- nrow(Phi)
   indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
@@ -327,7 +371,7 @@ if (plot_likelihood_surface) {
 
 if (use_tempering) {
   n_temper <- 10
-  K <- 10
+  K <- 100
   temper_schedule <- rep(1/K, K)
   temper_info <- paste0("_temper", n_temper)
 } else {
@@ -340,7 +384,7 @@ if (reorder_freq) {
   reorder_info <- ""
 }
 
-S <- 100L
+S <- 5000L
 a_vals <- 1
 
 ################ R-VGA starts here #################
@@ -356,7 +400,9 @@ if (rerun_rvgaw) {
                                       use_tempering = use_tempering, 
                                       temper_schedule = temper_schedule, 
                                       reorder_freq = reorder_freq, 
-                                      decreasing = decreasing)
+                                      decreasing = decreasing,
+                                      transform = transform,
+                                      use_median = use_median)
   if (save_rvgaw_results) {
     saveRDS(rvgaw_results, rvgaw_filepath)
   }
@@ -403,14 +449,16 @@ mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_results_realdata",
                          datafile, "_", date, ".rds")
 
 n_post_samples <- 10000
-burn_in <- 5000
+burn_in <- 10000
+# n_chains <- 2
 iters <- n_post_samples + burn_in
 
 if (rerun_mcmcw) {
   mcmcw_results <- run_mcmc_multi_sv(data = Y_mean_corrected, iters = iters, burn_in = burn_in, 
                                      prior_mean = prior_mean, prior_var = prior_var,
                                      adapt_proposal = T, use_whittle_likelihood = T,
-                                     use_cholesky = use_cholesky)
+                                     use_cholesky = use_cholesky,
+                                     transform = transform)
   if (save_mcmcw_results) {
     saveRDS(mcmcw_results, mcmcw_filepath)
   }
@@ -465,8 +513,9 @@ hmc_filepath <- paste0(result_directory, "hmc_results_realdata",
 
 if (rerun_hmc) {
   
-  # n_post_samples <- 10000
-  # burn_in <- 1000
+  n_post_samples <- 10000
+  burn_in <- 5000
+  n_chains <- 2
   stan.iters <- n_post_samples + burn_in
   d <- as.integer(ncol(Y_mean_corrected))
   
@@ -475,11 +524,11 @@ if (rerun_hmc) {
     use_chol <- 1
   }
   
-    stan_file <- "./source/stan_multi_sv.stan"
-    multi_sv_data <- list(d = d, Tfin = nrow(Y), Y = Y_mean_corrected,
-                          prior_mean_Phi = prior_mean[1:d], diag_prior_var_Phi = diag(prior_var)[1:d],
-                          prior_mean_gamma = prior_mean[(d+1):param_dim], diag_prior_var_gamma = diag(prior_var)[(d+1):param_dim],
-                          use_chol = 0)
+  stan_file <- "./source/stan_multi_sv.stan"
+  multi_sv_data <- list(d = d, Tfin = nrow(Y), Y = Y_mean_corrected,
+                        prior_mean_Phi = prior_mean[1:d], diag_prior_var_Phi = diag(prior_var)[1:d],
+                        prior_mean_gamma = prior_mean[(d+1):param_dim], diag_prior_var_gamma = diag(prior_var)[(d+1):param_dim],
+                        use_chol = 0, transform = ifelse(transform == "arctanh", 1, 0))
     
     
   multi_sv_model <- cmdstan_model(
@@ -489,9 +538,9 @@ if (rerun_hmc) {
   
   fit_stan_multi_sv <- multi_sv_model$sample(
     multi_sv_data,
-    chains = 1,
+    chains = n_chains,
     threads = parallel::detectCores(),
-    refresh = 5,
+    refresh = 100,
     iter_warmup = burn_in,
     iter_sampling = n_post_samples
   )
@@ -510,70 +559,6 @@ if (rerun_hmc) {
 hmc.post_samples_Phi <- stan_results$draws[,,1:(d^2)]
 hmc.post_samples_Sigma_eta <- stan_results$draws[,,(d^2+1):(2*d^2)]
 
-# ## Posterior density comparisons
-# 
-# # par(mfrow = c(2,4))
-# layout.matrix <- matrix(c(1, 2, 0, 3, 4, 5), nrow = 2, ncol = 3, byrow = T)
-# layout(mat = layout.matrix)
-# # layout.show(5)
-# par(mar = c(4, 4, 4, 4))
-# 
-# # plot_margin <- c(-0.2, 0.2)
-# plot(density(mcmcw.post_samples_phi_11), col = "royalblue", lty = 2, lwd = 1.5, 
-#      main = "phi_11")#, 
-#      # xlim = c(Phi[1,1] + plot_margin))
-# lines(density(rvgaw.post_samples_phi_11), col = "red", lty = 2, lwd = 1.5,)
-# lines(density(hmc.post_samples_Phi[,,1]), col = "skyblue", lwd = 1.5,)
-# # lines(density(mcmcw1.post_samples_phi), col = "green")
-# # abline(v = Phi[1,1], lty = 2)
-# legend("topright", legend = c("MCMCW", "R-VGAW", "HMC"), col = c("blue", "red", "forestgreen"),
-#        lty = c(2,2,1), cex = 0.7)
-# 
-# # plot(density(mcmcw.post_samples_phi_12), col = "royalblue", lty = 2, lwd = 1.5,
-# #      main = "phi_12", 
-# #      xlim = c(Phi[1,2] + plot_margin))
-# # lines(density(rvgaw.post_samples_phi_12), col = "red", lty = 2, lwd = 1.5,)
-# # lines(density(hmc.post_samples_Phi[,,3]), col = "skyblue", lwd = 1.5,)
-# # abline(v = Phi[1,2], lty = 2)
-# # 
-# # plot(density(mcmcw.post_samples_phi_21), col = "royalblue", lty = 2, lwd = 1.5, 
-# #      main = "phi_21", 
-# #      xlim = c(Phi[2,1] + plot_margin))
-# # lines(density(rvgaw.post_samples_phi_21), col = "red", lty = 2, lwd = 1.5)
-# # lines(density(hmc.post_samples_Phi[,,2]), col = "skyblue", lwd = 1.5)
-# # abline(v = Phi[2,1], lty = 2)
-# 
-# plot(density(mcmcw.post_samples_phi_22), col = "royalblue", lty = 2, lwd = 1.5, 
-#      main = "phi_22")#, 
-#      # xlim = c(Phi[2,2] + plot_margin))
-# lines(density(rvgaw.post_samples_phi_22), col = "red", lty = 2, lwd = 1.5)
-# lines(density(hmc.post_samples_Phi[,,4]), col = "skyblue", lwd = 1.5)
-# 
-# plot_margin <- c(-0.2, 0.2)
-# plot(density(mcmcw.post_samples_sigma_eta_11), col = "royalblue", lty = 2, lwd = 1.5,
-#      main = "sigma_eta_11")
-# lines(density(rvgaw.post_samples_sigma_eta_11), col = "red", lty = 2, lwd = 1.5)
-# lines(density(hmc.post_samples_Sigma_eta[,,1]), col = "skyblue", lwd = 1.5)
-# # lines(density(mcmcw1.post_samples_sigma_eta2), col = "green")
-# 
-# if (use_cholesky) {
-#   plot(density(mcmcw.post_samples_sigma_eta_12), col = "royalblue", lty = 2, lwd = 1.5,
-#        main = "sigma_eta_12")
-#   lines(density(rvgaw.post_samples_sigma_eta_12), col = "red", lty = 2, lwd = 1.5)
-#   lines(density(hmc.post_samples_Sigma_eta[,,3]), col = "skyblue", lwd = 1.5)
-# 
-#   # plot(density(mcmcw.post_samples_sigma_eta_21), col = "royalblue", lty = 2, lwd = 1.5,
-#   #      main = "sigma_eta_21", xlim = c(Sigma_eta[2,1] + plot_margin))
-#   # lines(density(rvgaw.post_samples_sigma_eta_21), col = "red", lty = 2, lwd = 1.5)
-#   # lines(density(hmc.post_samples_Sigma_eta[,,2]), col = "skyblue", lwd = 1.5)
-#   # abline(v = Sigma_eta[2,1], lty = 2)
-# }
-# 
-# plot(density(mcmcw.post_samples_sigma_eta_22), col = "royalblue", lty = 2, lwd = 1.5, 
-#      main = "sigma_eta_22")
-# lines(density(rvgaw.post_samples_sigma_eta_22), col = "red", lty = 2, lwd = 1.5)
-# lines(density(hmc.post_samples_Sigma_eta[,,4]), col = "skyblue", lwd = 1.5)
-
 ## Plot posterior estimates
 indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
 hmc_indices <- diag(matrix(1:d^2, d, d, byrow = T))
@@ -583,17 +568,14 @@ par(mfrow = c(d+1,d))
 for (k in 1:d) {    
   rvgaw.post_samples_phi <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[k,k]))
   mcmcw.post_samples_phi <- unlist(lapply(mcmcw.post_samples_Phi, function(x) x[k,k]))
-  # hmc.post_samples_phi <- unlist(lapply(hmc.post_samples_Phi, function(x) x[k,k]))
   
   ind <- paste0(k,k)
-  plot(density(rvgaw.post_samples_phi), col = "red", lty = 2, 
-       main = bquote(phi[.(ind)]))
-  lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 2)
-  # lines(density(hmc.post_samples_phi), col = "skyblue")
-  
-  lines(density(hmc.post_samples_Phi[,,hmc_indices[k]]), col = "skyblue")
-  # abline(v = Phi[k,k], lty = 2)
-  # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
+  plot(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 2,
+       main = bquote(phi[.(ind)]), xlim = c(0.1, 0.99))
+  lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 2, lwd = 2)
+  # lines(density(hmc.post_samples_Phi[,,hmc_indices[k]]), col = "deepskyblue")
+  # legend("topleft", legend = c("R-VGA Whittle", "MCMC Whittle", "HMC"), 
+  #        col = c("red", "royalblue", "deepskyblue"),
   #        lty = c(2,2,1), cex = 0.7)
 }
 
@@ -609,10 +591,10 @@ for (k in 1:nrow(indices)) {
   mcmcw.post_samples_sigma_eta <- unlist(lapply(mcmcw.post_samples_Sigma_eta, function(x) x[i,j]))
   
   ind <- paste0(i,j)
-  plot(density(rvgaw.post_samples_sigma_eta), col = "red", lty = 2,
-       main = bquote(sigma_eta[.(ind)]))
-  lines(density(mcmcw.post_samples_sigma_eta), col = "royalblue", lty = 2)
-  lines(density(hmc.post_samples_Sigma_eta[,,hmc_indices[k]]), col = "skyblue")
+  plot(density(rvgaw.post_samples_sigma_eta), col = "red", lty = 2, lwd = 2,
+    main = bquote(sigma_eta[.(ind)]), xlim = c(0, 2))
+  lines(density(mcmcw.post_samples_sigma_eta), col = "royalblue", lty = 2, lwd = 2)
+  lines(density(hmc.post_samples_Sigma_eta[,,hmc_indices[k]]), col = "deepskyblue")
   # abline(v = Sigma_eta[i,j], lty = 2)
   # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
   #        lty = c(2,2,1), cex = 0.3, y.intersp = 0.25)
@@ -628,6 +610,44 @@ if (plot_trajectories) {
   }
 }
 
+if (plot_trace) { # for mcmcw
+  par(mfrow = c(ceiling(d+d^2)/2, 2))
+  thinning_interval <- seq(1, iters, by = 1)
+  for (k in 1:d) {
+    mcmcw.post_samples_phi <- unlist(lapply(mcmcw.post_samples_Phi, function(x) x[k,k]))
+    ## red = R-VGA Whittle, blue = MCMC Whittle, green = HMC
+    
+    mcmcw.post_samples_phi <- mcmcw.post_samples_phi[-(1:burn_in)]
+    # mcmcw.post_samples_phi_thinned <- mcmcw.post_samples_phi[thinning_interval]                      
+    coda::traceplot(coda::as.mcmc(mcmcw.post_samples_phi), main = "phi")
+  }
+  
+  for (k in 1:nrow(indices)) {
+    i <- indices[k, 1]
+    j <- indices[k, 2]
+    
+    mcmcw.post_samples_sigma_eta <- unlist(lapply(mcmcw.post_samples_Sigma_eta, function(x) x[i,j]))
+    mcmcw.post_samples_sigma_eta <- mcmcw.post_samples_sigma_eta[-(1:burn_in)]
+    # mcmcw.post_samples_sigma_eta_thinned <- mcmcw.post_samples_sigma_eta[thinning_interval]
+    coda::traceplot(coda::as.mcmc(mcmcw.post_samples_sigma_eta), main = "sigma_eta")
+  }
+  
+  ## HMC trace plots
+  # hmc.post_samples_phi11 <- as.vector(hmc.post_samples_Phi[,,1])
+  # hmc.post_samples_phi22 <- as.vector(hmc.post_samples_Phi[,,4])
+  # coda::traceplot(coda::as.mcmc(hmc.post_samples_phi11), ylab = "phi_11")
+  # coda::traceplot(coda::as.mcmc(hmc.post_samples_phi22), ylab = "phi_22")
+  # 
+  # hmc.post_samples_sigma_eta11 <- as.vector(hmc.post_samples_Sigma_eta[,,1])
+  # hmc.post_samples_sigma_eta21 <- as.vector(hmc.post_samples_Sigma_eta[,,2])
+  # hmc.post_samples_sigma_eta22 <- as.vector(hmc.post_samples_Sigma_eta[,,4])
+  # 
+  # coda::traceplot(coda::as.mcmc(hmc.post_samples_sigma_eta11), ylab = "sigma_eta_11")
+  # coda::traceplot(coda::as.mcmc(hmc.post_samples_sigma_eta21), ylab = "sigma_eta_21")
+  # coda::traceplot(coda::as.mcmc(hmc.post_samples_sigma_eta22), ylab = "sigma_eta_22")
+  
+}
+
 if (save_plots) {
   plot_file <- paste0("svreal_posterior_", d, "d", "_", nobs, "obs", temper_info, reorder_info,
                       "_", date, ".png")
@@ -641,21 +661,18 @@ if (save_plots) {
   
   ### Posterior of diagonal entries of Phi  
   for (k in 1:d) {    
-    rvgaw.post_samples_phi <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[k,k]))
-    mcmcw.post_samples_phi <- unlist(lapply(mcmcw.post_samples_Phi, function(x) x[k,k]))
-    # hmc.post_samples_phi <- unlist(lapply(hmc.post_samples_Phi, function(x) x[k,k]))
-    
-    ind <- paste0(k,k)
-    plot(density(rvgaw.post_samples_phi), col = "red", lty = 2, 
-         main = bquote(phi[.(ind)]))
-    lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 2)
-    # lines(density(hmc.post_samples_phi), col = "skyblue")
-    
-    lines(density(hmc.post_samples_Phi[,,hmc_indices[k]]), col = "skyblue")
-    # abline(v = Phi[k,k], lty = 2)
-    # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
-    #        lty = c(2,2,1), cex = 0.7)
-  }
+  rvgaw.post_samples_phi <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[k,k]))
+  mcmcw.post_samples_phi <- unlist(lapply(mcmcw.post_samples_Phi, function(x) x[k,k]))
+  
+  ind <- paste0(k,k)
+  plot(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 2,
+       main = bquote(phi[.(ind)]), xlim = c(0.1, 0.99))
+  lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 2, lwd = 2)
+  lines(density(hmc.post_samples_Phi[,,hmc_indices[k]]), col = "deepskyblue")
+  # legend("topleft", legend = c("R-VGA Whittle", "MCMC Whittle", "HMC"), 
+  #        col = c("red", "royalblue", "deepskyblue"),
+  #        lty = c(2,2,1), cex = 0.7)
+}
   
   ### Posterior of Sigma_eta
   # par(mfrow = c(1,d))
@@ -669,11 +686,10 @@ if (save_plots) {
     mcmcw.post_samples_sigma_eta <- unlist(lapply(mcmcw.post_samples_Sigma_eta, function(x) x[i,j]))
     
     ind <- paste0(i,j)
-    plot(density(rvgaw.post_samples_sigma_eta), col = "red", lty = 2,
-         main = bquote(sigma_eta[.(ind)]))
-    lines(density(mcmcw.post_samples_sigma_eta), col = "royalblue", lty = 2)
-    lines(density(hmc.post_samples_Sigma_eta[,,hmc_indices[k]]), col = "skyblue")
-    # abline(v = Sigma_eta[i,j], lty = 2)
+    plot(density(rvgaw.post_samples_sigma_eta), col = "red", lty = 2, lwd = 2,
+         main = bquote(sigma_eta[.(ind)]), xlim = c(0.1, 0.7))
+    lines(density(mcmcw.post_samples_sigma_eta), col = "royalblue", lty = 2, lwd = 2)
+    lines(density(hmc.post_samples_Sigma_eta[,,hmc_indices[k]]), lwd = 2, col = "deepskyblue")
     # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
     #        lty = c(2,2,1), cex = 0.3, y.intersp = 0.25)
   }
