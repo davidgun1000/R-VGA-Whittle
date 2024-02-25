@@ -1,10 +1,13 @@
 run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL, 
                          prior_mean = 0, prior_var = 1, 
                          deriv = "tf", S = 500,
-                         use_tempering = T, temper_schedule = rep(1/10, 10),
+                         use_tempering = T, temper_first = T, 
+                         temper_schedule = rep(1/10, 10),
                          n_temper = 100,
-                         reorder_freq = F, reorder_seed = NULL,
-                         decreasing = F) {
+                         reorder = "random", reorder_seed = 2023,
+                         n_reorder = 10,
+                         transform = "logit",
+                         use_welch = F) {
   
   print("Starting R-VGAL with Whittle likelihood...")
   
@@ -18,6 +21,7 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
   rvgaw.prec <- list()
   rvgaw.prec[[1]] <- chol2inv(chol(prior_var))
   
+  
   ## Fourier frequencies
   k <- seq(-ceiling(n/2)+1, floor(n/2), 1)
   k_in_likelihood <- k[k >= 1 & k <= floor((n-1)/2)]
@@ -30,24 +34,83 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
   periodogram <- 1/n * Mod(fourier_transf)^2
   I <- periodogram[k_in_likelihood + 1]
   
-  if (reorder_freq) { # randomise order of frequencies and periodogram components
+  # browser()
+
+  if (use_welch) {
+    par(mfrow = c(1,1))
+    test1 <- empiricalSpectrum(as.ts(y_tilde))
+    test2 <- welchPSD(as.ts(y_tilde), seglength = length(y_tilde)/10, windowingPsdCorrection = F)
+    # plot(test1$frequency, test1$power, col="black", type = "l")
+    # lines(test2$frequency, test2$power, col="red", type = "l", lwd = 2)
     
-    if (decreasing) {
-      sorted_freq <- sort(freq, decreasing = T, index.return = T)
-      indices <- sorted_freq$ix
-      reordered_freq <- sorted_freq$x
-      reordered_I <- I[indices]
-    } else {
-      set.seed(reorder_seed)
-      indices <- sample(1:length(freq), length(freq))
-      reordered_freq <- freq[indices]
-      reordered_I <- I[indices]
+    freq2 <- test2$frequency[2:length(test2$frequency)]
+    I2 <- test2$power[2:length(test2$power)]/2
+    plot(freq, I, type = "l") # original freq and periodogram
+    lines(freq2, I2, col = "red", lwd = 2) # welch's
+
+    freq <- freq2
+    I <- I2
+  browser()  
+  
+    # ## Try Welch's method here?
+    # n_segments <- 10
+    # seg_length <- n/n_segments
+    # # split the vector by length 
+    # seg_ind <- split(1:n,ceiling(seq_along(1:n) / seg_length))
+    # seg_period <- list()
+    # for (q in 1:n_segments) {
+    #   fft_output <- fft(y_tilde[seg_ind[[q]]])
+    #   seg_period[[q]] <- 1/seg_length * Mod(fft_output)^2
+    # }
+    
+    # avg_periodogram <- 1/n_segments * Reduce("+", seg_period)
+    # avg_periodogram_half <- avg_periodogram[1:floor((seg_length-1)/2)]
+  
+    # I <- avg_periodogram_half
+    # freq <- 2 * pi * 1:floor((seg_length-1)/2) / seg_length
+    # browser()
+  }
+
+    
+  if (reorder == "decreasing") {
+    sorted_freq <- sort(freq, decreasing = T, index.return = T)
+    indices <- sorted_freq$ix
+    reordered_freq <- sorted_freq$x
+    reordered_I <- I[indices]
+  } else if (reorder == "random") {
+    set.seed(reorder_seed)
+    indices <- sample(1:length(freq), length(freq))
+    reordered_freq <- freq[indices]
+    reordered_I <- I[indices]
+    browser()
+  } else if (reorder > 0) {
+    # n_others <- length(freq - n_reorder)
+    original <- (n_reorder+1):length(freq)
+    inds <- ceiling(seq(n_reorder, length(freq) - n_reorder, length.out = n_reorder))
+    new <- original
+    for (j in 1:n_reorder) {
+      new <- append(new, j, after = inds[j])
     }
     
-    # plot(reordered_freq, type = "l")
-    # lines(freq, col = "red")
-    freq <- reordered_freq
-    I <- reordered_I 
+    reordered_freq <- freq[new]
+    reordered_I <- I[new]
+  } else { ## do nothing
+    reordered_freq <- freq
+    reordered_I <- I
+  }
+  
+  # plot(reordered_freq, type = "l")
+  # lines(freq, col = "red")
+  freq <- reordered_freq
+  I <- reordered_I 
+  # browser()
+  
+  if (use_tempering) {
+    if (temper_first) {
+      cat("Damping the first ", n_temper, "frequencies... \n")
+    } else {
+      cat("Damping the last ", n_temper, "frequencies... \n")
+    }
   }
   
   for (i in 1:length(freq)) {
@@ -56,10 +119,19 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
     
     a_vals <- 1
     if (use_tempering) {
-      if (i <= n_temper) { # only temper the first n_temper observations
-        a_vals <- temper_schedule
-      } 
-    } 
+      if (temper_first) {
+        
+        if (i <= n_temper) { # only temper the first n_temper observations
+          a_vals <- temper_schedule
+        }  
+      } else {
+        if (i > length(freq) - n_temper) { # only temper the first n_temper observations
+        
+          a_vals <- temper_schedule
+        }
+      }
+      
+    }
     
     mu_temp <- rvgaw.mu_vals[[i]]
     prec_temp <- rvgaw.prec[[i]] 
@@ -98,13 +170,14 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
         #                                          omega_k = freq[i], I_k = I[[i]])
         # }
         
-        grad_expr <- Deriv(log_likelihood_arctanh, c("theta_phi", "theta_eta"))
+        grad_expr <- Deriv(log_likelihood_fun, c("theta_phi", "theta_eta"))
         grad2_expr <- Deriv(grad_expr, c("theta_phi", "theta_eta"))
       
         # Gradient
         grad_deriv <- mapply(grad_expr, theta_phi = theta_phi, 
                              theta_eta = theta_eta, theta_xi = theta_xi,
-                             omega_k = freq[i], I_k = I[[i]])
+                             omega_k = freq[i], I_k = I[[i]],
+                             transform = transform)
         
         E_grad_deriv <- rowMeans(grad_deriv)
         
@@ -134,58 +207,19 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
         freq_i_tf <- tf$Variable(freq[i])
         I_i_tf <- tf$Variable(I[[i]])
         
-        tf_out_test <- compute_grad_arctanh_test(samples_tf, I_i_tf, freq_i_tf)
-        grads_tf_test <- tf_out_test$grad
-        hessians_tf_test <- tf_out_test$hessian
-        E_grad_tf <- tf$reduce_mean(grads_tf_test, 0L)
-        E_hessian_tf <- tf$reduce_mean(hessians_tf_test, 0L)
+        if (transform == "arctanh") {
+          tf_out <- compute_grad_arctanh(samples_tf, I_i_tf, freq_i_tf)
+        } else { # use logit
+          tf_out <- compute_grad_logit(samples_tf, I_i_tf, freq_i_tf)
+        }
         
-        # tf_out <- compute_grad_arctanh(theta_phi_tf, theta_eta_tf, theta_xi_tf, 
-        #                                I_i_tf, freq_i_tf)
-        # 
-        # grads_tf <- tf_out$grad
-        # hessians_tf <- tf_out$hessian
-        # 
-        # ## need to then reshape these into the right grads and hessians
-        # ## gradients
-        # E_grad_tf <- rowMeans(as.matrix(grads_tf, 2L, 2L))
-        # 
-        # ## Optimise: do all of these in TF and do one read out at the end
-        # 
-        # ## batch-extract diagonals, and then extract first element of diagonal as grad2_phi(1),
-        # ## second element as grad2_phi(2) etc
-        # grad2_phi_tf <- diag(as.matrix(hessians_tf[[1]][1,,], S, S)) #grad2_phi
-        # grad2_phi_eta_tf <- diag(as.matrix(hessians_tf[[1]][2,,], S, S)) #grad2_phi_sigma
-        # # grad2_phi_xi_tf <- diag(as.matrix(hessians_tf[[1]][3,,], S, S)) #grad2_phi_sigma
-        # 
-        # grad2_eta_phi_tf <- diag(as.matrix(hessians_tf[[2]][1,,], S, S)) #grad2_sigma_phi
-        # grad2_eta_tf <- diag(as.matrix(hessians_tf[[2]][2,,], S, S)) #grad2_sigma
-        # # grad2_eta_xi_tf <- diag(as.matrix(hessians_tf[[2]][3,,], S, S)) #grad2_sigma
-        # 
-        # # grad2_xi_phi_tf <- diag(as.matrix(hessians_tf[[3]][1,,], S, S)) #grad2_sigma_phi
-        # # grad2_xi_eta_tf <- diag(as.matrix(hessians_tf[[3]][2,,], S, S)) #grad2_sigma
-        # # grad2_xi_tf <- diag(as.matrix(hessians_tf[[3]][3,,], S, S)) #grad2_sigma
-        # 
-        # # take mean of each element in Hessian, then put them together in a 2x2 matrix E_hessian
-        # E_grad2_phi_tf <- mean(grad2_phi_tf)
-        # E_grad2_eta_tf <- mean(grad2_eta_tf)
-        # # E_grad2_xi_tf <- mean(grad2_xi_tf)
-        # 
-        # E_grad2_phi_eta_tf <- mean(grad2_phi_eta_tf)
-        # # E_grad2_phi_xi_tf <- mean(grad2_phi_xi_tf)
-        # # E_grad2_eta_xi_tf <- mean(grad2_eta_xi_tf)
-        # 
-        # # E_hessian_tf <- diag(c(E_grad2_phi_tf, E_grad2_eta_tf, E_grad2_xi_tf))
-        # # E_hessian_tf[2, 1] <- mean(grad2_phi_eta_tf)
-        # # E_hessian_tf[3, 1] <- mean(grad2_phi_xi_tf)
-        # # E_hessian_tf[3, 2] <- mean(grad2_eta_xi_tf)
-        # # 
-        # # E_hessian_tf[upper.tri(E_hessian_tf)] <- t(E_hessian_tf[lower.tri(E_hessian_tf)])
-        # 
-        # E_hessian_tf <- matrix(c(E_grad2_phi_tf, E_grad2_phi_eta_tf, 
-        #                          E_grad2_phi_eta_tf, E_grad2_eta_tf), 
-        #                        2, 2, byrow = T)
-        # 
+        # browser()
+        
+        grads_tf <- tf_out$grad
+        hessians_tf <- tf_out$hessian
+        E_grad_tf <- tf$reduce_mean(grads_tf, 0L)
+        E_hessian_tf <- tf$reduce_mean(hessians_tf, 0L)
+        
         tf.t2 <- proc.time()
         
         E_grad <- as.vector(E_grad_tf)
@@ -194,9 +228,10 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
       }
       prec_temp <- prec_temp - a * E_hessian
       
-      # if(any(eigen(prec_temp)$value < 0)) {
-      #   browser()
-      # }
+      if(any(eigen(prec_temp)$value < 0)) {
+        prec_temp <- prec_temp + diag(1, nrow(prec_temp))
+        
+      }
       
       mu_temp <- mu_temp + chol2inv(chol(prec_temp)) %*% (a * E_grad)
       # mu_temp <- mu_temp + 1/prec_temp * (a * E_grad)
@@ -214,20 +249,23 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
   
   rvgaw.t2 <- proc.time()
   
+ 
+  
   ## Posterior samples
   rvgaw.post_var <- chol2inv(chol(rvgaw.prec[[length(freq)]]))
   
   theta.post_samples <- rmvnorm(10000, rvgaw.mu_vals[[length(freq)]], rvgaw.post_var) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
   
-  rvgaw.post_samples_phi <- tanh(theta.post_samples[, 1])
+  if (transform == "arctanh") {
+    rvgaw.post_samples_phi <- tanh(theta.post_samples[, 1])
+  } else {
+    rvgaw.post_samples_phi <- 1 / (1 + exp(-theta.post_samples[, 1]))
+  }
+  
   rvgaw.post_samples_eta <- sqrt(exp(theta.post_samples[, 2]))
-  # rvgaw.post_samples_xi <- sqrt(exp(theta.post_samples[, 3]))
   
   rvgaw.post_samples <- list(phi = rvgaw.post_samples_phi,
                              sigma_eta = rvgaw.post_samples_eta) #,
-                             # sigma_xi = rvgaw.post_samples_xi)
-  
-  # plot(density(rvgaw.post_samples))
   
   ## Save results
   rvgaw_results <- list(mu = rvgaw.mu_vals,
@@ -236,16 +274,23 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
                         transform = transform,
                         S = S,
                         use_tempering = use_tempering,
+                        temper_first = temper_first,
                         temper_schedule = a_vals,
                         time_elapsed = rvgaw.t2 - rvgaw.t1)
   
   return(rvgaw_results)
 }
 
-log_likelihood_arctanh <- function(theta_phi, theta_eta, theta_xi, 
+log_likelihood_fun <- function(theta_phi, theta_eta, theta_xi, transform,
                                    omega_k, I_k) { 
   
-  phi <- tanh(theta_phi)
+  phi <- 0
+  if (transform == "arctanh") {
+    phi <- tanh(theta_phi)
+  } else {
+    phi <- 1 / (1 + exp(-theta_phi))
+  }
+  
   sigma_eta <- sqrt(exp(theta_eta))
   sigma_xi <- sqrt(exp(theta_xi))
   
@@ -255,45 +300,39 @@ log_likelihood_arctanh <- function(theta_phi, theta_eta, theta_xi,
   llh <- - log(spec_dens_y) - I_k / spec_dens_y
 }
 
+# compute_grad_arctanh <- tf_function(
+#   testf <- function(theta_phi, theta_eta, theta_xi, I_i, freq_i) {
+#     with (tf$GradientTape() %as% tape2, {
+#       with (tf$GradientTape(persistent = TRUE) %as% tape1, {
+#         
+#         phi <- tf$math$tanh(theta_phi)
+#         spec_dens_x_tf <- tf$math$divide(tf$math$exp(theta_eta), 1 + tf$math$square(phi) -
+#                                            tf$math$multiply(2, tf$math$multiply(phi, tf$math$cos(freq_i))))
+#         
+#         ## add spec_dens_xi here
+#         spec_dens_xi_tf <- tf$math$exp(theta_xi)
+#         
+#         ## then
+#         spec_dens_y_tf <- spec_dens_x_tf + spec_dens_xi_tf
+#         
+#         log_likelihood_tf <- - tf$math$log(spec_dens_y_tf) - tf$multiply(I_i, tf$math$reciprocal(spec_dens_y_tf))
+#         
+#       })
+#       grad_tf %<-% tape1$gradient(log_likelihood_tf, c(theta_phi, theta_eta))
+#       
+#       grad_tf <- tf$reshape(grad_tf, c(2L, dim(grad_tf[[1]])))
+#     })
+#     grad2_tf %<-% tape2$jacobian(grad_tf, c(theta_phi, theta_eta))
+#     
+#     return(list(llh = log_likelihood_tf, 
+#                 grad = grad_tf,
+#                 hessian = grad2_tf))
+#   }
+# )
+
+
 compute_grad_arctanh <- tf_function(
-  testf <- function(theta_phi, theta_eta, theta_xi, I_i, freq_i) {
-    with (tf$GradientTape() %as% tape2, {
-      with (tf$GradientTape(persistent = TRUE) %as% tape1, {
-        
-        phi <- tf$math$tanh(theta_phi)
-        spec_dens_x_tf <- tf$math$divide(tf$math$exp(theta_eta), 1 + tf$math$square(phi) -
-                                           tf$math$multiply(2, tf$math$multiply(phi, tf$math$cos(freq_i))))
-        
-        ## add spec_dens_xi here
-        # spec_dens_xi_tf <- tf$math$divide(tf$math$exp(theta_xi_s), tf$math$multiply(2, pi))
-        spec_dens_xi_tf <- tf$math$exp(theta_xi)
-        
-        ## then
-        spec_dens_y_tf <- spec_dens_x_tf + spec_dens_xi_tf
-        
-        log_likelihood_tf <- - tf$math$log(spec_dens_y_tf) - tf$multiply(I_i, tf$math$reciprocal(spec_dens_y_tf))
-        # tape1$watch(c(theta_phi_tf, theta_sigma_tf))
-        # log_likelihood <- tf$math$pow(theta_phi_tf, 3) + tf$math$pow(theta_sigma_tf, 3)
-        # log_likelihood <- tf$math$pow(theta_tf[, 1], 3) + tf$math$pow(theta_tf[, 2], 3)
-        
-      })
-      # c(grad_theta_phi, grad_theta_sigma) %<-% tape1$gradient(log_likelihood, c(theta_phi_tf, theta_sigma_tf))
-      grad_tf %<-% tape1$gradient(log_likelihood_tf, c(theta_phi, theta_eta))
-      # grad %<-% tape1$gradient(log_likelihood, c(theta_tf[, 1], theta_tf[, 2]))
-      
-      grad_tf <- tf$reshape(grad_tf, c(2L, dim(grad_tf[[1]])))
-    })
-    grad2_tf %<-% tape2$jacobian(grad_tf, c(theta_phi, theta_eta))
-    
-    return(list(llh = log_likelihood_tf, 
-                grad = grad_tf,
-                hessian = grad2_tf))
-  }
-)
-
-
-compute_grad_arctanh_test <- tf_function(
-  testf <- function(samples_tf, I_i, freq_i) {
+  compute_grad_arctanh <- function(samples_tf, I_i, freq_i) {
     with (tf$GradientTape() %as% tape2, {
       with (tf$GradientTape(persistent = TRUE) %as% tape1, {
         
@@ -301,34 +340,58 @@ compute_grad_arctanh_test <- tf_function(
         theta_eta <- samples_tf[, 2]
         
         theta_xi <- tf$constant(rep(log(pi^2/2), as.integer(length(theta_phi))))
-        # theta_xi <- tf$tile(tf$constant(log(pi^2/2)), c(2L, 1L))
         
         phi <- tf$math$tanh(theta_phi)
         spec_dens_x_tf <- tf$math$divide(tf$math$exp(theta_eta), 1 + tf$math$square(phi) -
                                            tf$math$multiply(2, tf$math$multiply(phi, tf$math$cos(freq_i))))
         
         ## add spec_dens_xi here
-        # spec_dens_xi_tf <- tf$math$divide(tf$math$exp(theta_xi_s), tf$math$multiply(2, pi))
         spec_dens_xi_tf <- tf$math$exp(theta_xi)
         
         ## then
         spec_dens_y_tf <- spec_dens_x_tf + spec_dens_xi_tf
         
         log_likelihood_tf <- - tf$math$log(spec_dens_y_tf) - tf$multiply(I_i, tf$math$reciprocal(spec_dens_y_tf))
-        # tape1$watch(c(theta_phi_tf, theta_sigma_tf))
-        # log_likelihood <- tf$math$pow(theta_phi_tf, 3) + tf$math$pow(theta_sigma_tf, 3)
-        # log_likelihood <- tf$math$pow(theta_tf[, 1], 3) + tf$math$pow(theta_tf[, 2], 3)
         
       })
-      # c(grad_theta_phi, grad_theta_sigma) %<-% tape1$gradient(log_likelihood, c(theta_phi_tf, theta_sigma_tf))
-      # grad_tf %<-% tape1$gradient(log_likelihood_tf, c(theta_phi, theta_eta))
       grad_tf %<-% tape1$gradient(log_likelihood_tf, samples_tf)
       
-      # grad %<-% tape1$gradient(log_likelihood, c(theta_tf[, 1], theta_tf[, 2]))
-      # grad_tf <- tf$reshape(grad_tf, c(2L, dim(grad_tf[[1]])))
     })
     grad2_tf %<-% tape2$batch_jacobian(grad_tf, samples_tf)
-    # grad2_tf %<-% tape2$jacobian(grad_tf, c(theta_phi, theta_eta))
+    
+    return(list(llh = log_likelihood_tf, 
+                grad = grad_tf,
+                hessian = grad2_tf))
+  }
+)
+
+compute_grad_logit <- tf_function(
+  compute_grad_logit <- function(samples_tf, I_i, freq_i) {
+    with (tf$GradientTape() %as% tape2, {
+      with (tf$GradientTape(persistent = TRUE) %as% tape1, {
+        
+        theta_phi <- samples_tf[, 1]
+        theta_eta <- samples_tf[, 2]
+        
+        theta_xi <- tf$constant(rep(log(pi^2/2), as.integer(length(theta_phi))))
+        
+        phi <- tf$math$divide(1, 1 + tf$math$exp(-theta_phi))
+        spec_dens_x_tf <- tf$math$divide(tf$math$exp(theta_eta), 1 + tf$math$square(phi) -
+                                           tf$math$multiply(2, tf$math$multiply(phi, tf$math$cos(freq_i))))
+        
+        ## add spec_dens_xi here
+        spec_dens_xi_tf <- tf$math$exp(theta_xi)
+        
+        ## then
+        spec_dens_y_tf <- spec_dens_x_tf + spec_dens_xi_tf
+        
+        log_likelihood_tf <- - tf$math$log(spec_dens_y_tf) - tf$multiply(I_i, tf$math$reciprocal(spec_dens_y_tf))
+        
+      })
+      grad_tf %<-% tape1$gradient(log_likelihood_tf, samples_tf)
+      
+    })
+    grad2_tf %<-% tape2$batch_jacobian(grad_tf, samples_tf)
     
     return(list(llh = log_likelihood_tf, 
                 grad = grad_tf,

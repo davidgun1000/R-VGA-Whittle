@@ -1,7 +1,12 @@
-run_hmc_sv <- function(data, iters, burn_in) {
+run_hmc_sv <- function(data, transform = "logit",
+                       prior_mean, prior_var, iters, burn_in) {
   
   y <- data
   
+  transform01 <- 0 # 0 == logit, 1 == arctanh
+  if (transform == "arctanh") {
+    transform01 <- 1
+  }
   # sv_code <- '
   #   data {
   #     int<lower=0> Tfin;   // # time points (equally spaced)
@@ -35,7 +40,8 @@ run_hmc_sv <- function(data, iters, burn_in) {
   log_kappa2_est <- mean(log(y^2)) - (digamma(1/2) + log(2))
   
   sv_data <- list(Tfin = length(y), y = y,
-                  kappa = sqrt(exp(log_kappa2_est)))
+                  prior_mean = prior_mean, diag_prior_var = diag(prior_var),
+                  kappa = sqrt(exp(log_kappa2_est)), transform = transform01)
   
   # hfit <- stan(model_code = sv_code, 
   #              model_name="sv", data = sv_data, 
@@ -45,7 +51,7 @@ run_hmc_sv <- function(data, iters, burn_in) {
     sv_data,
     chains = 1,
     threads = parallel::detectCores(),
-    refresh = 5,
+    refresh = 100,
     iter_warmup = burn_in,
     iter_sampling = n_post_samples
   )

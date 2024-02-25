@@ -2,7 +2,7 @@
 
 setwd("~/R-VGA-Whittle/SV")
 
-library("rstan")
+# library("rstan")
 library(cmdstanr)
 
 source("./source/run_hmc_sv.R")
