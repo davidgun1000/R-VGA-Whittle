@@ -54,8 +54,8 @@ use_cholesky <- T # use lower Cholesky factor to parameterise Sigma_eta
 use_heaps_mapping <- F
 plot_likelihood_surface <- F
 plot_prior_samples <- T
-plot_trajectories <- T
-plot_trace <- T
+plot_trajectories <- F
+plot_trace <- F
 transform <- "arctanh"
 prior_type <- "prior1"
 
@@ -63,15 +63,19 @@ prior_type <- "prior1"
 rerun_rvgaw <- T
 rerun_mcmcw <- F
 rerun_hmc <- F
+rerun_hmcw <- F
 
-save_rvgaw_results <- T
+save_rvgaw_results <- F
 save_mcmcw_results <- F
 save_hmc_results <- F
+save_hmcw_results <- F
+
 save_plots <- F
 
 ## R-VGAW flags
-use_tempering <- F
-reorder <- 0 #"decreasing"
+use_tempering <- T
+temper_first <- T
+reorder <- 0 #"random" #"decreasing"
 reorder_seed <- 2024
 # decreasing <- F
 use_median <- F
@@ -99,7 +103,8 @@ data$NZD_returns <- c(0, log(data$NZD[2:nrows] / data$NZD[1:(nrows-1)])*100)
 data$USD_returns <- c(0, log(data$USD[2:nrows] / data$USD[1:(nrows-1)])*100)
 
 exrates <- data[-1, c("AUD_returns", "NZD_returns", "USD_returns")] # get rid of 1st row
-Y <- exrates[, 1:nstocks]
+# Y <- exrates[, 1:nstocks]
+Y <- exrates[, c("AUD_returns", "USD_returns")]
 # eur_usd <- read.csv("./data/EURUSD.csv")
 # aud_usd <- read.csv("./data/AUDUSD.csv")
 # nzd_usd <- read.csv("./data/NZDUSD.csv")
@@ -215,7 +220,7 @@ if (plot_prior_samples) {
     }
   }
   
-  browser()
+  # browser()
 }
 
 ## Plot likelihood surface here
@@ -225,7 +230,7 @@ if (plot_likelihood_surface) {
   sigma_eta_grid <- seq(0.01, 0.99, length.out = 100)
   sigma_eta_grid_offdiag <- seq(0.01, 0.15, length.out = 100)
   
-  Tfin <- length(Y_demeaned)
+  Tfin <- nrow(Y_demeaned)
   k <- seq(-ceiling(Tfin/2)+1, floor(Tfin/2), 1)
   k_in_likelihood <- k [k >= 1 & k <= floor((Tfin-1)/2)]
   freq <- 2 * pi * k_in_likelihood / Tfin
@@ -359,7 +364,9 @@ if (use_tempering) {
   temper_info <- ""
 }
 
-if (reorder == "random" | reorder == "decreasing") {
+if (reorder == "random") {
+  reorder_info <- paste0("_", reorder, reorder_seed)
+} else if (reorder == "decreasing") {
   reorder_info <- paste0("_", reorder)
 } else if (reorder > 0) {
   reorder_info <- paste0("_reorder", reorder)
@@ -382,6 +389,7 @@ if (rerun_rvgaw) {
                                       use_cholesky = use_cholesky,
                                       use_tempering = use_tempering, 
                                       temper_schedule = temper_schedule, 
+                                      temper_first = temper_first,
                                       reorder = reorder, 
                                       # decreasing = decreasing,
                                       reorder_seed = reorder_seed,
@@ -543,6 +551,87 @@ if (rerun_hmc) {
 # hmc.post_samples_Phi <- stan_results$draws[,,1:(d^2)]
 # hmc.post_samples_Sigma_eta <- stan_results$draws[,,(d^2+1):(2*d^2)]
 
+######################################
+##   Stan with Whittle likelihood   ##
+######################################
+
+hmcw_filepath <- paste0(result_directory, "hmcw_forex", 
+                         "_", date, ".rds")
+
+if (rerun_hmcw) {
+  print("Starting HMC with Whittle likelihood...")
+  
+  n_post_samples <- 10000
+  burn_in <- 1000
+  stan.iters <- n_post_samples + burn_in
+  
+  stan_file_whittle <- "./source/stan_multi_sv_whittle.stan"
+  
+  # ## Calculation of Whittle likelihood
+  ## Fourier frequencies
+  Tfin <- nrow(Y_demeaned)
+  k <- seq(-ceiling(Tfin/2)+1, floor(Tfin/2), 1)
+  k_in_likelihood <- k [k >= 1 & k <= floor((Tfin-1)/2)]
+  freq <- 2 * pi * k_in_likelihood / Tfin
+  
+  # ## astsa package
+  Z <- log(Y_demeaned^2) - colMeans(log(Y_demeaned^2))
+  fft_out <- mvspec(Z, detrend = F, plot = F)
+  I <- fft_out$fxx
+  
+  I_indices <- seq(dim(I)[3])
+  I_list <- lapply(I_indices[1:length(freq)], function(x) I[,,x])
+
+  re_matrices <- lapply(1:length(freq), function(i) Re(I_list[[i]]))
+  im_matrices <- lapply(1:length(freq), function(i) Im(I_list[[i]]))
+    
+  # periodogram_array <- array(NA, dim = c(length(freq), d, d))
+  # for(q in 1:length(freq)) {
+  #   periodogram_array[q,,] <- I_list[[q]]
+  # }
+  # periodogram_array <- I_list
+  # transform <- "arctanh"
+  multi_sv_data_whittle <- list(d = ncol(Y_demeaned), nfreq = length(freq), freqs = freq,
+                                # periodogram = periodogram_array,
+                                re_matrices = re_matrices,
+                                im_matrices = im_matrices,
+                                prior_mean_Phi = prior_mean[1:d], 
+                                diag_prior_var_Phi = diag(prior_var)[1:d],
+                                prior_mean_gamma = prior_mean[(d+1):param_dim], 
+                                diag_prior_var_gamma = diag(prior_var)[(d+1):param_dim],
+                                # diag_prior_var_gamma = rep(0.1, 3),
+                                transform = ifelse(transform == "arctanh", 1, 0)
+                                )
+  
+  multi_sv_model_whittle <- cmdstan_model(
+    stan_file_whittle,
+    cpp_options = list(stan_threads = TRUE)
+  )
+  
+  fit_stan_multi_sv_whittle <- multi_sv_model_whittle$sample(
+    multi_sv_data_whittle,
+    chains = 1,
+    threads = parallel::detectCores(),
+    refresh = 100,
+    iter_warmup = burn_in,
+    iter_sampling = n_post_samples
+  )
+  
+  stan_whittle_results <- list(draws = fit_stan_multi_sv_whittle$draws(variables = c("Phi_mat", "Sigma_eta_mat")),
+                       time = fit_stan_multi_sv_whittle$time)
+  
+  if (save_hmcw_results) {
+    saveRDS(stan_whittle_results, hmcw_filepath)
+  }
+  
+} else {
+  stan_whittle_results <- readRDS(hmcw_filepath)
+}
+
+hmcw.post_samples_Phi <- stan_whittle_results$draws[,,1:4]
+hmcw.post_samples_Sigma_eta <- stan_whittle_results$draws[,,5:8]
+
+
 ## Plot posterior estimates
 indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
 hmc_indices <- diag(matrix(1:d^2, d, d, byrow = T))
@@ -557,9 +646,9 @@ for (k in 1:d) {
 
   ind <- paste0(k,k)
   plot(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 2,
-       main = bquote(phi[.(ind)]), xlim = c(0.1, 0.99))
+       main = bquote(phi[.(ind)]), xlim = c(0.98, 1.0))
   lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 2, lwd = 2)
-  # lines(density(hmc.post_samples_Phi[,,hmc_indices[k]]), col = "deepskyblue")
+  lines(density(hmcw.post_samples_Phi[,,hmc_indices[k]]), col = "goldenrod", lwd = 2)
   # legend("topleft", legend = c("R-VGA Whittle", "MCMC Whittle", "HMC"), 
   #        col = c("red", "royalblue", "deepskyblue"),
   #        lty = c(2,2,1), cex = 0.7)
@@ -580,7 +669,7 @@ for (k in 1:nrow(indices)) {
   plot(density(rvgaw.post_samples_sigma_eta), col = "red", lty = 2, lwd = 2,
     main = bquote(sigma_eta[.(ind)])) #, xlim = c(0, 2))
   lines(density(mcmcw.post_samples_sigma_eta), col = "royalblue", lty = 2, lwd = 2)
-  # lines(density(hmc.post_samples_Sigma_eta[,,hmc_indices[k]]), col = "deepskyblue")
+  lines(density(hmcw.post_samples_Sigma_eta[,,hmc_indices[k]]), col = "goldenrod", lwd = 2)
   # abline(v = Sigma_eta[i,j], lty = 2)
   # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
   #        lty = c(2,2,1), cex = 0.3, y.intersp = 0.25)
@@ -591,7 +680,18 @@ if (plot_trajectories) {
   par(mfrow = c(2,3))
   trajectories <- list()
   for (p in 1:param_dim) {
-    trajectories[[p]] <- sapply(rvgaw_results$mu, function(e) e[p])
+    trajectory <- sapply(rvgaw_results$mu, function(e) e[p])
+    
+    if (p <= d) {
+      if (transform == "arctanh") {
+        trajectory <- tanh(trajectory)
+      } else {
+        trajectory <- 1/(1 + exp(-trajectory))
+      }
+    } else {
+      trajectory <- sqrt(exp(trajectory))
+    }
+    trajectories[[p]] <- trajectory
     plot(trajectories[[p]], type = "l", xlab = "Iteration", ylab = "param", main = "")
   }
 }
@@ -602,6 +702,12 @@ if (plot_trace) { # for mcmcw
   for (k in 1:d) {
     mcmcw.post_samples_phi <- unlist(lapply(mcmcw.post_samples_Phi, function(x) x[k,k]))
     ## red = R-VGA Whittle, blue = MCMC Whittle, green = HMC
+    
+    if (transform == "arctanh") {
+      mcmcw.post_samples_phi <- tanh(mcmcw.post_samples_phi)
+    } else {
+      mcmcw.post_samples_phi <- 1/(1 + exp(-mcmcw.post_samples_phi))
+    }
     
     mcmcw.post_samples_phi <- mcmcw.post_samples_phi[-(1:burn_in)]
     # mcmcw.post_samples_phi_thinned <- mcmcw.post_samples_phi[thinning_interval]                      
@@ -614,6 +720,7 @@ if (plot_trace) { # for mcmcw
     
     mcmcw.post_samples_sigma_eta <- unlist(lapply(mcmcw.post_samples_Sigma_eta, function(x) x[i,j]))
     mcmcw.post_samples_sigma_eta <- mcmcw.post_samples_sigma_eta[-(1:burn_in)]
+    mcmcw.post_samples_sigma_eta <- sqrt(exp(mcmcw.post_samples_sigma_eta))
     # mcmcw.post_samples_sigma_eta_thinned <- mcmcw.post_samples_sigma_eta[thinning_interval]
     coda::traceplot(coda::as.mcmc(mcmcw.post_samples_sigma_eta), main = "sigma_eta")
   }
@@ -655,6 +762,8 @@ if (save_plots) {
        main = bquote(phi[.(ind)]), xlim = c(0.1, 0.99))
   lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 2, lwd = 2)
   lines(density(hmc.post_samples_Phi[,,hmc_indices[k]]), col = "deepskyblue")
+  lines(density(hmcw.post_samples_Phi[,,hmc_indices[k]]), col = "goldenrod")
+  
   # legend("topleft", legend = c("R-VGA Whittle", "MCMC Whittle", "HMC"), 
   #        col = c("red", "royalblue", "deepskyblue"),
   #        lty = c(2,2,1), cex = 0.7)
@@ -676,6 +785,8 @@ if (save_plots) {
          main = bquote(sigma_eta[.(ind)]), xlim = c(0.1, 0.7))
     lines(density(mcmcw.post_samples_sigma_eta), col = "royalblue", lty = 2, lwd = 2)
     lines(density(hmc.post_samples_Sigma_eta[,,hmc_indices[k]]), lwd = 2, col = "deepskyblue")
+    lines(density(hmcw.post_samples_Sigma_eta[,,hmc_indices[k]]), lwd = 2, col = "goldenrod")
+    
     # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
     #        lty = c(2,2,1), cex = 0.3, y.intersp = 0.25)
   }

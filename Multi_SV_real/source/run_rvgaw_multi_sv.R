@@ -89,9 +89,10 @@ test21 <- sapply(1:dim(I)[3], function(x) I[,,x][2,2]) # extract periodogram ele
     
   freq <- reordered_freq
   I <- reordered_I 
-  browser()
+  par(mfrow = c(2,1))
   test1 <- sapply(1:length(freq), function(i) I[,,i][1,1])
   test2 <- sapply(1:length(freq), function(i) I[,,i][2,2])
+  browser()
   #### TF starts ##########
   # j <- 1
   # samples_tf <- tf$Variable(samples)

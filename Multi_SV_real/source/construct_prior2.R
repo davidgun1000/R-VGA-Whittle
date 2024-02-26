@@ -17,7 +17,7 @@ construct_prior <- function(data, prior_type = "prior1",
   if (prior_type == "prior0") {
     prior_mean <- rep(0, param_dim)
   } else {
-    prior_mean <- c(rep(0, m), rep(-3, m), rep(0, m*(m-1)/2))
+    prior_mean <- c(rep(2, m), rep(-3, m), rep(0, m*(m-1)/2))
   }
   
   # Prior var for the AR parameters
@@ -77,7 +77,7 @@ construct_prior <- function(data, prior_type = "prior1",
   diag_var_Sigma <- 0
   if (use_cholesky) {
     ## N(0, 0.1) prior for the lower Cholesky factor
-    diag_var_Sigma <- c(0.5, 0.1, 0.05) #rep(0.5, m*(m-1)/2 + m)
+    diag_var_Sigma <- c(0.5, 0.05, 0.05) #rep(0.5, m*(m-1)/2 + m)
   } else {
     # diag_var_Sigma <- rep(0.01, m)
     diag_var_Sigma <- rep(0.1, m)

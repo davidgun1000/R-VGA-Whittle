@@ -129,11 +129,16 @@ cormat <- cor(all_data)
 # Toys and BusSv have low correlation (2000 obs)
 
 # Y <- returns_data[, 2:4]
-Y_mean_corrected <- Y - colMeans(Y)
-d <- ncol(Y_mean_corrected)
+# Y_demeaned <- Y - colMeans(Y)
+Y_demeaned <- Y
+for (col in 1:ncol(Y)) {
+  Y_demeaned[, col] <- Y[, col] - mean(Y[, col])
+}
+
+d <- ncol(Y_demeaned)
 # par(mfrow = c(d, 1))
-# for (c in 1:ncol(Y_mean_corrected)) {
-#   plot(Y_mean_corrected[, c], type = "l")
+# for (c in 1:ncol(Y_demeaned)) {
+#   plot(Y_demeaned[, c], type = "l")
 # }
 
 ############################## Inference #######################################
@@ -144,7 +149,7 @@ d <- ncol(Y_mean_corrected)
 
 
 ## Construct initial distribution/prior
-prior <- construct_prior(data = Y_mean_corrected, use_cholesky = use_cholesky, prior_type = prior_type)
+prior <- construct_prior(data = Y_demeaned, use_cholesky = use_cholesky, prior_type = prior_type)
 prior_mean <- prior$prior_mean
 prior_var <- prior$prior_var
 
@@ -244,13 +249,13 @@ if (plot_likelihood_surface) {
   sigma_eta_grid <- seq(0.01, 0.99, length.out = 100)
   sigma_eta_grid_offdiag <- seq(0.01, 0.15, length.out = 100)
   
-  Tfin <- length(Y_mean_corrected)
+  Tfin <- length(Y_demeaned)
   k <- seq(-ceiling(Tfin/2)+1, floor(Tfin/2), 1)
   k_in_likelihood <- k [k >= 1 & k <= floor((Tfin-1)/2)]
   freq <- 2 * pi * k_in_likelihood / Tfin
   
   # ## astsa package
-  Z <- log(Y_mean_corrected^2) - rowMeans(log(Y_mean_corrected^2))
+  Z <- log(Y_demeaned^2) - rowMeans(log(Y_demeaned^2))
   fft_out <- mvspec(t(Z), detrend = F, plot = F)
   # fft_out <- mvspec(t(X), detrend = F, plot = F)
   I_all <- fft_out$fxx
@@ -394,7 +399,7 @@ rvgaw_filepath <- paste0(result_directory, "rvga_whittle_results_realdata",
                          datafile, temper_info, reorder_info, "_", date, ".rds")
 
 if (rerun_rvgaw) {
-  rvgaw_results <- run_rvgaw_multi_sv(data = Y_mean_corrected, prior_mean = prior_mean, 
+  rvgaw_results <- run_rvgaw_multi_sv(data = Y_demeaned, prior_mean = prior_mean, 
                                       prior_var = prior_var, S = S,
                                       use_cholesky = use_cholesky,
                                       use_tempering = use_tempering, 
@@ -454,7 +459,7 @@ burn_in <- 10000
 iters <- n_post_samples + burn_in
 
 if (rerun_mcmcw) {
-  mcmcw_results <- run_mcmc_multi_sv(data = Y_mean_corrected, iters = iters, burn_in = burn_in, 
+  mcmcw_results <- run_mcmc_multi_sv(data = Y_demeaned, iters = iters, burn_in = burn_in, 
                                      prior_mean = prior_mean, prior_var = prior_var,
                                      adapt_proposal = T, use_whittle_likelihood = T,
                                      use_cholesky = use_cholesky,
@@ -517,7 +522,7 @@ if (rerun_hmc) {
   burn_in <- 5000
   n_chains <- 2
   stan.iters <- n_post_samples + burn_in
-  d <- as.integer(ncol(Y_mean_corrected))
+  d <- as.integer(ncol(Y_demeaned))
   
   use_chol <- 0
   if (use_cholesky) {
@@ -525,7 +530,7 @@ if (rerun_hmc) {
   }
   
   stan_file <- "./source/stan_multi_sv.stan"
-  multi_sv_data <- list(d = d, Tfin = nrow(Y), Y = Y_mean_corrected,
+  multi_sv_data <- list(d = d, Tfin = nrow(Y), Y = Y_demeaned,
                         prior_mean_Phi = prior_mean[1:d], diag_prior_var_Phi = diag(prior_var)[1:d],
                         prior_mean_gamma = prior_mean[(d+1):param_dim], diag_prior_var_gamma = diag(prior_var)[(d+1):param_dim],
                         use_chol = 0, transform = ifelse(transform == "arctanh", 1, 0))
@@ -553,11 +558,92 @@ if (rerun_hmc) {
   }
   
 } else {
-  stan_results <- readRDS(hmc_filepath)
+  # stan_results <- readRDS(hmc_filepath)
 }
 
-hmc.post_samples_Phi <- stan_results$draws[,,1:(d^2)]
-hmc.post_samples_Sigma_eta <- stan_results$draws[,,(d^2+1):(2*d^2)]
+# hmc.post_samples_Phi <- stan_results$draws[,,1:(d^2)]
+# hmc.post_samples_Sigma_eta <- stan_results$draws[,,(d^2+1):(2*d^2)]
+
+######################################
+##   Stan with Whittle likelihood   ##
+######################################
+
+hmcw_filepath <- paste0(result_directory, "hmcw_results_realdata",  
+                       "_", date, "_", dataset, "_", prior_type, ".rds")
+
+if (rerun_hmcw) {
+  print("Starting HMC with Whittle likelihood...")
+  
+  n_post_samples <- 1000
+  burn_in <- 500
+  stan.iters <- n_post_samples + burn_in
+  
+  stan_file_whittle <- "./source/stan_multi_sv_whittle.stan"
+  
+  # ## Calculation of Whittle likelihood
+  ## Fourier frequencies
+  k <- seq(-ceiling(Tfin/2)+1, floor(Tfin/2), 1)
+  k_in_likelihood <- k [k >= 1 & k <= floor((Tfin-1)/2)]
+  freq <- 2 * pi * k_in_likelihood / Tfin
+  
+  # ## astsa package
+  Z <- log(Y_demeaned^2) - colMeans(log(Y_demeaned^2))
+  fft_out <- mvspec(Z, detrend = F, plot = F)
+  I <- fft_out$fxx
+  
+  I_indices <- seq(dim(I)[3])
+  I_list <- lapply(I_indices[1:length(freq)], function(x) I[,,x])
+
+  re_matrices <- lapply(1:length(freq), function(i) Re(I_list[[i]]))
+  im_matrices <- lapply(1:length(freq), function(i) Im(I_list[[i]]))
+    
+  # periodogram_array <- array(NA, dim = c(length(freq), d, d))
+  # for(q in 1:length(freq)) {
+  #   periodogram_array[q,,] <- I_list[[q]]
+  # }
+  # periodogram_array <- I_list
+  # transform <- "arctanh"
+  multi_sv_data_whittle <- list(d = ncol(Y), nfreq = length(freq), freqs = freq,
+                                # periodogram = periodogram_array,
+                                re_matrices = re_matrices,
+                                im_matrices = im_matrices,
+                                prior_mean_Phi = prior_mean[1:d], 
+                                diag_prior_var_Phi = diag(prior_var)[1:d],
+                                prior_mean_gamma = prior_mean[(d+1):param_dim], 
+                                diag_prior_var_gamma = diag(prior_var)[(d+1):param_dim],
+                                # diag_prior_var_gamma = rep(0.1, 3),
+                                transform = ifelse(transform == "arctanh", 1, 0),
+                                truePhi = Phi,
+                                trueSigma = Sigma_eta
+                                )
+  
+  multi_sv_model_whittle <- cmdstan_model(
+    stan_file_whittle,
+    cpp_options = list(stan_threads = TRUE)
+  )
+  
+  fit_stan_multi_sv_whittle <- multi_sv_model_whittle$sample(
+    multi_sv_data_whittle,
+    chains = 1,
+    threads = parallel::detectCores(),
+    refresh = 100,
+    iter_warmup = burn_in,
+    iter_sampling = n_post_samples
+  )
+  
+  stan_whittle_results <- list(draws = fit_stan_multi_sv_whittle$draws(variables = c("Phi_mat", "Sigma_eta_mat")),
+                       time = fit_stan_multi_sv_whittle$time)
+  
+  if (save_hmcw_results) {
+    saveRDS(stan_whittle_results, hmcw_filepath)
+  }
+  
+} else {
+  stan_whittle_results <- readRDS(hmcw_filepath)
+}
+
+hmcw.post_samples_Phi <- stan_whittle_results$draws[,,1:4]
+hmcw.post_samples_Sigma_eta <- stan_whittle_results$draws[,,5:8]
 
 ## Plot posterior estimates
 indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
@@ -573,7 +659,7 @@ for (k in 1:d) {
   plot(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 2,
        main = bquote(phi[.(ind)]), xlim = c(0.1, 0.99))
   lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 2, lwd = 2)
-  # lines(density(hmc.post_samples_Phi[,,hmc_indices[k]]), col = "deepskyblue")
+  lines(density(hmcw.post_samples_Phi[,,hmc_indices[k]]), col = "deepskyblue")
   # legend("topleft", legend = c("R-VGA Whittle", "MCMC Whittle", "HMC"), 
   #        col = c("red", "royalblue", "deepskyblue"),
   #        lty = c(2,2,1), cex = 0.7)
@@ -594,7 +680,7 @@ for (k in 1:nrow(indices)) {
   plot(density(rvgaw.post_samples_sigma_eta), col = "red", lty = 2, lwd = 2,
     main = bquote(sigma_eta[.(ind)]), xlim = c(0, 2))
   lines(density(mcmcw.post_samples_sigma_eta), col = "royalblue", lty = 2, lwd = 2)
-  lines(density(hmc.post_samples_Sigma_eta[,,hmc_indices[k]]), col = "deepskyblue")
+  lines(density(hmcw.post_samples_Sigma_eta[,,hmc_indices[k]]), col = "deepskyblue")
   # abline(v = Sigma_eta[i,j], lty = 2)
   # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
   #        lty = c(2,2,1), cex = 0.3, y.intersp = 0.25)
