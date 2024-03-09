@@ -252,9 +252,9 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
  
   
   ## Posterior samples
-  rvgaw.post_var <- chol2inv(chol(rvgaw.prec[[length(freq)]]))
+  rvgaw.post_var <- chol2inv(chol(rvgaw.prec[[length(freq)+1]]))
   
-  theta.post_samples <- rmvnorm(10000, rvgaw.mu_vals[[length(freq)]], rvgaw.post_var) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
+  theta.post_samples <- rmvnorm(10000, rvgaw.mu_vals[[length(freq)+1]], rvgaw.post_var) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
   
   if (transform == "arctanh") {
     rvgaw.post_samples_phi <- tanh(theta.post_samples[, 1])

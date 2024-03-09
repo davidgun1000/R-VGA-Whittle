@@ -22,14 +22,17 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
   rvgaw.prec[[1]] <- chol2inv(chol(prior_var))
   
   ## Fourier frequencies
-  k <- seq(-ceiling(n/2)+1, floor(n/2), 1)
-  k_in_likelihood <- k[k >= 1 & k <= floor((n-1)/2)]
-  freq <- 2 * pi * k_in_likelihood / n
+  # k <- seq(-ceiling(n/2)+1, floor(n/2), 1)
+  # k_in_likelihood <- k[k >= 1 & k <= floor((n-1)/2)]
+  # freq <- 2 * pi * k_in_likelihood / n
   
-  ## Fourier transform of the observations
-  fourier_transf <- fft(y)
-  periodogram <- 1/n * Mod(fourier_transf)^2
-  I <- periodogram[k_in_likelihood + 1]
+  # ## Fourier transform of the observations
+  # fourier_transf <- fft(y)
+  # periodogram <- 1/n * Mod(fourier_transf)^2
+  # I <- periodogram[k_in_likelihood + 1]
+  pgram_output <- compute_periodogram(y)
+  freq <- pgram_output$freq
+  I <- pgram_output$periodogram
   
   if (reorder == "decreasing") {
     sorted_freq <- sort(freq, decreasing = T, index.return = T)
@@ -51,10 +54,8 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
     for (j in 1:n_reorder) {
       new <- append(new, j, after = inds[j])
     }
-    
     reordered_freq <- freq[new]
     reordered_I <- I[new]
-    browser()
   } else { ## do nothing
     reordered_freq <- freq
     reordered_I <- I
@@ -192,7 +193,7 @@ if (use_tempering) {
         # E_hessian_tf <- as.matrix(E_hessian_tf)
         
         tf.t2 <- proc.time()
-        
+browser()        
         E_grad <- as.array(E_grad_tf)
         E_hessian <- as.array(E_hessian_tf)
         
@@ -273,37 +274,6 @@ log_likelihood_arctanh <- function(theta_phi, theta_eta, theta_eps,
   llh <- - log(spec_dens_y) - I_k / spec_dens_y
 }
 
-compute_grad_arctanh <- tf_function(
-  testf <- function(theta_phi_s, theta_eta_s, theta_eps_s, I_i, freq_i) {
-    log_likelihood_tf <- 0
-    with (tf$GradientTape() %as% tape2, {
-      with (tf$GradientTape(persistent = TRUE) %as% tape1, {
-        
-        phi_s <- tf$math$tanh(theta_phi_s)
-        spec_dens_x_tf <- tf$math$divide(tf$math$exp(theta_eta_s), 1 + tf$math$square(phi_s) -
-                                      tf$math$multiply(2, tf$math$multiply(phi_s, tf$math$cos(freq_i))))
-        
-        ## add spec_dens_eps here
-        spec_dens_eps_tf <- tf$math$exp(theta_eps_s)
-        
-        ## then
-        spec_dens_y_tf <- spec_dens_x_tf + spec_dens_eps_tf
-        
-        log_likelihood_tf <- - tf$math$log(spec_dens_y_tf) - tf$multiply(I_i, tf$math$reciprocal(spec_dens_y_tf))
-        
-      })
-      grad_tf %<-% tape1$gradient(log_likelihood_tf, c(theta_phi_s, theta_eta_s, theta_eps_s))
-      
-      grad_tf <- tf$reshape(grad_tf, c(3L, dim(grad_tf[[1]])))
-    })
-    
-    grad2_tf %<-% tape2$jacobian(grad_tf, c(theta_phi_s, theta_eta_s, theta_eps_s))
-    
-    return(list(log_likelihood = log_likelihood_tf,
-                grad = grad_tf,
-                hessian = grad2_tf))
-  }
-)
 
 compute_grad_arctanh_test <- tf_function(
   testf <- function(samples_tf, I_i, freq_i) {
@@ -324,15 +294,10 @@ compute_grad_arctanh_test <- tf_function(
         log_likelihood_tf <- - tf$math$log(spec_dens_y_tf) - tf$multiply(I_i, tf$math$reciprocal(spec_dens_y_tf))
         
       })
-      # vars <- tf$reshape(cbind(theta_phi_s, theta_eta_s, theta_eps_s), c(length(theta_phi_s), 3L))
       grad_tf %<-% tape1$gradient(log_likelihood_tf, samples_tf)
-      # grad_tf %<-% tape1$gradient(log_likelihood_tf, c(theta_phi_s, theta_eta_s, theta_eps_s))
-      
       # grad_tf <- tf$reshape(tf$transpose(grad_tf), c(dim(grad_tf[[1]]), 3L))
     })
-    # grad2_tf %<-% tape2$jacobian(grad_tf, c(theta_phi_s, theta_eta_s, theta_eps_s))
     
-    # vars <- tf$reshape(c(theta_phi_s, theta_eta_s, theta_eps_s), dim(grad_tf))
     grad2_tf %<-% tape2$batch_jacobian(grad_tf, samples_tf)
     # grad2_tf %<-% tape2$batch_jacobian(grad_tf, vars)
     

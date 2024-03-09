@@ -68,7 +68,7 @@ use_welch <- F
 rerun_rvgaw <- F
 rerun_mcmcw <- F
 # rerun_mcmce <- F
-rerun_hmc <- T
+rerun_hmc <- F
 rerun_hmcw <- F
 
 save_rvgaw_results <- F

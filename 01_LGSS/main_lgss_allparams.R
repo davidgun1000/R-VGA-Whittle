@@ -14,8 +14,10 @@ library(grid)
 library(gtable)
 library(gridExtra)
 
-source("./source/run_rvgaw_lgss_tf.R")
+# source("./source/run_rvgaw_lgss_tf.R")
+source("./source/run_rvgaw_lgss_block.R")
 source("./source/run_mcmc_lgss_allparams.R")
+source("./source/compute_periodogram.R")
 source("./source/compute_kf_likelihood.R")
 source("./source/compute_whittle_likelihood_lgss.R")
 source("./source/update_sigma.R")
@@ -57,18 +59,16 @@ save_data <- F
 
 rerun_rvgaw <- T
 rerun_mcmcw <- F
-# rerun_mcmce <- F
 rerun_hmc <- F
 rerun_hmcw <- F
 
 save_rvgaw_results <- F
 save_mcmcw_results <- F
-# save_mcmce_results <- F
 save_hmc_results <- F
 save_hmcw_results <- F
 
 plot_likelihood_surface <- F
-plot_trajectory <- F
+plot_trajectories <- T
 save_plots <- F
 
 ## R-VGA flags
@@ -109,7 +109,7 @@ if (regenerate_data) {
   
   ## Plot true process and observations
   # par(mfrow = c(1, 1))
-  plot(x, type = "l", main = "True process")
+  # plot(x, type = "l", main = "True process")
   # points(y, col = "cyan")
   
   lgss_data <- list(x = x, y = y, phi = phi, sigma_eps = sigma_eps, sigma_eta = sigma_eta)
@@ -129,7 +129,7 @@ sigma_eps <- lgss_data$sigma_eps
 sigma_eta <- lgss_data$sigma_eta
 
 ## MCMC settings
-burn_in <- 5000
+burn_in <- 1000
 n_post_samples <- 10000
 MCMC_iters <- n_post_samples + burn_in # Number of MCMC iterations
 
@@ -196,6 +196,9 @@ for (i in 1:length(phi_grid)) {
 
 S <- 1000L
 
+nblocks <- 100
+n_indiv <- 100
+
 if (use_tempering) {
   n_temper <- 10
   K <- 100
@@ -233,7 +236,9 @@ if (rerun_rvgaw) {
                                   temper_schedule = temper_schedule,
                                   reorder = reorder,
                                   reorder_seed = reorder_seed,
-                                  n_temper = n_temper
+                                  n_temper = n_temper,
+                                  nblocks = nblocks,
+                                  n_indiv = n_indiv
                                   )
   
   if (save_rvgaw_results) {
@@ -247,32 +252,6 @@ if (rerun_rvgaw) {
 rvgaw.post_samples_phi <- rvgaw_results$post_samples$phi
 rvgaw.post_samples_eta <- rvgaw_results$post_samples$sigma_eta
 rvgaw.post_samples_eps <- rvgaw_results$post_samples$sigma_eps
-
-# ################################################################################
-# ##                        MCMC with exact likelihood                          ##   
-# ################################################################################
-# 
-# mcmce_filepath <- paste0(result_directory, "mcmc_exact_results_n", n,
-#                          "_phi", phi_string, "_", date, ".rds")
-# 
-# if (rerun_mcmce) {
-#   mcmce_results <- run_mcmc_lgss(y, #sigma_eta, sigma_eps,
-#                                  iters = MCMC_iters, burn_in = burn_in,
-#                                  prior_mean = prior_mean, prior_var = prior_var,
-#                                  state_ini_mean = state_ini_mean, state_ini_var = state_ini_var,
-#                                  adapt_proposal = T, use_whittle_likelihood = F)
-# 
-#   if (save_mcmce_results) {
-#     saveRDS(mcmce_results, mcmce_filepath)
-#   }
-# 
-# } else {
-#   mcmce_results <- readRDS(mcmce_filepath)
-# }
-# 
-# mcmce.post_samples_phi <- as.mcmc(mcmce_results$post_samples$phi[-(1:burn_in)])
-# mcmce.post_samples_eta <- as.mcmc(mcmce_results$post_samples$sigma_eta[-(1:burn_in)])
-# mcmce.post_samples_eps <- as.mcmc(mcmce_results$post_samples$sigma_eps[-(1:burn_in)])
 
 ################################################################################
 ##                       MCMC with Whittle likelihood                         ##
@@ -299,14 +278,9 @@ mcmcw.post_samples_phi <- as.mcmc(mcmcw_results$post_samples$phi[-(1:burn_in)])
 mcmcw.post_samples_eta <- as.mcmc(mcmcw_results$post_samples$sigma_eta[-(1:burn_in)])
 mcmcw.post_samples_eps <- as.mcmc(mcmcw_results$post_samples$sigma_eps[-(1:burn_in)])
 
-# Trace plot
-# par(mfrow = c(2,1))
-# traceplot(mcmce.post_samples_phi, main = "Trace plot for MCMC with exact likelihood")
-# traceplot(mcmcw.post_samples_phi, main = "Trace plot for MCMC with Whittle likelihood")
-
-#########################
-###        STAN       ###
-#########################
+##################################################
+###        HMC with the exact likelihood       ###
+##################################################
 
 hmc_filepath <- paste0(result_directory, "hmc_results_n", n, 
                        "_phi", phi_string, "_", date, ".rds")
@@ -326,7 +300,6 @@ if (rerun_hmc) {
   stan_results <- readRDS(hmc_filepath)
 }
 
-
 # hmc.fit <- extract(hfit, pars = c("theta_phi", "theta_sigma"),
 #                    permuted = F)
 # 
@@ -337,23 +310,27 @@ hmc.post_samples_phi <- stan_results$draws[,,1]#tanh(hmc.theta_phi)
 hmc.post_samples_eta <- stan_results$draws[,,2]#sqrt(exp(hmc.theta_sigma))
 hmc.post_samples_eps <- stan_results$draws[,,3]#sqrt(exp(hmc.theta_sigma))
 
-########################################################
-##          Stan with the Whittle likelihood          ##
-########################################################
+#######################################################
+##          HMC with the Whittle likelihood          ##
+#######################################################
 hmcw_filepath <- paste0(result_directory, "hmcw_results_n", n, 
                        "_phi", phi_string, "_", date, ".rds")
 
 if (rerun_hmcw) {
   
-  ## Fourier frequencies
-  k <- seq(-ceiling(n/2)+1, floor(n/2), 1)
-  k_in_likelihood <- k[k >= 1 & k <= floor((n-1)/2)]
-  freq <- 2 * pi * k_in_likelihood / n
+  # ## Fourier frequencies
+  # k <- seq(-ceiling(n/2)+1, floor(n/2), 1)
+  # k_in_likelihood <- k[k >= 1 & k <= floor((n-1)/2)]
+  # freq <- 2 * pi * k_in_likelihood / n
   
-  ## Fourier transform of the observations
-  fourier_transf <- fft(y)
-  periodogram <- 1/n * Mod(fourier_transf)^2
-  I <- periodogram[k_in_likelihood + 1]
+  # ## Fourier transform of the observations
+  # fourier_transf <- fft(y)
+  # periodogram <- 1/n * Mod(fourier_transf)^2
+  # I <- periodogram[k_in_likelihood + 1]
+
+  pgram_output <- compute_periodogram(y)
+  freq <- pgram_output$freq
+  I <- pgram_output$periodogram
   
   whittle_stan_file <- "./source/stan_lgss_whittle.stan"
   
@@ -397,110 +374,6 @@ hmcw.post_samples_eps <- hmcw_results$draws[,,3]
 ##                            Posterior densities                             ##
 ################################################################################
 
-# par(mfrow = c(1,3))
-# # plot(density(mcmce.post_samples_phi), main = "Posterior of phi", col = "blue")
-# plot(density(rvgaw.post_samples_phi), main = "Posterior of phi", col = "red")
-# lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 2, lwd = 2)
-# lines(density(hmc.post_samples_phi), col = "deepskyblue", lty = 2, lwd = 2)
-# lines(density(hmcw.post_samples_phi), col = "goldenrod", lty = 2, lwd = 2)
-# abline(v = phi, lty = 2, lwd = 2)
-# legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
-#        col = c("red", "royalblue", "deepskyblue", "goldenrod"), lty = c(1, 2, 2))
-# 
-# # plot(density(mcmce.post_samples_eta), main = "Posterior of sigma_eta", col = "blue")
-# plot(density(rvgaw.post_samples_eta), main = "Posterior of sigma_eta", col = "red", lwd = 2)
-# lines(density(mcmcw.post_samples_eta), col = "royalblue", lty = 2, lwd = 2)
-# lines(density(hmc.post_samples_eta), col = "deepskyblue", lty = 2, lwd = 2)
-# lines(density(hmcw.post_samples_eta), col = "goldenrod", lty = 2, lwd = 2)
-# abline(v = sigma_eta, lty = 2, lwd = 2)
-# legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
-#        col = c("red", "royalblue", "deepskyblue", "goldenrod"), lty = c(1, 2, 2))
-# 
-# # plot(density(mcmce.post_samples_eps), xlim = c(sigma_eps - 0.1, sigma_eps + 0.15),
-# #      main = "Posterior of sigma_epsilon", col = "blue")
-# plot(density(hmc.post_samples_eps), xlim = c(sigma_eps - 0.05, sigma_eps + 0.05),
-#      main = "Posterior of sigma_epsilon", col = "deepskyblue", lwd = 2)
-# lines(density(mcmcw.post_samples_eps), col = "royalblue", lty = 2, lwd = 2)
-# lines(density(rvgaw.post_samples_eps), col = "red", lty = 2, lwd = 2)
-# abline(v = sigma_eps, lty = 2, lwd = 2)
-# legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
-#        col = c("deepskyblue", "royalblue", "red"), lty = c(1, 2, 2))
-# 
-# if (save_plots) {
-#   plot_file <- paste0("lgss_posterior", "_", n, temper_info, reorder_info,
-#                       "_", transform, "_", date, ".png")
-#   filepath = paste0("./plots/", plot_file)
-#   png(filepath, width = 900, height = 350)
-#   
-#   par(mfrow = c(1,3))
-#   # plot(density(mcmce.post_samples_phi), main = "Posterior of phi", col = "blue")
-#   plot(density(hmc.post_samples_phi), main = "Posterior of phi", col = "deepskyblue", lwd = 2)
-#   lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 2, lwd = 2)
-#   lines(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 2)
-#   abline(v = phi, lty = 2, lwd = 2)
-#   # legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
-#   #        col = c("deepskyblue", "royalblue", "red"), lty = c(1, 2, 2))
-#   
-#   # plot(density(mcmce.post_samples_eta), main = "Posterior of sigma_eta", col = "blue")
-#   plot(density(hmc.post_samples_eta), main = "Posterior of sigma_eta", col = "deepskyblue", lwd = 2)
-#   lines(density(mcmcw.post_samples_eta), col = "royalblue", lty = 2, lwd = 2)
-#   lines(density(rvgaw.post_samples_eta), col = "red", lty = 2, lwd = 2)
-#   abline(v = sigma_eta, lty = 2, lwd = 2)
-#   # legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
-#   #        col = c("deepskyblue", "royalblue", "red"), lty = c(1, 2, 2))
-#   
-#   # plot(density(mcmce.post_samples_eps), xlim = c(sigma_eps - 0.1, sigma_eps + 0.15),
-#   #      main = "Posterior of sigma_epsilon", col = "blue")
-#   plot(density(hmc.post_samples_eps), xlim = c(sigma_eps - 0.1, sigma_eps + 0.1),
-#        main = "Posterior of sigma_epsilon", col = "deepskyblue", lwd = 2)
-#   lines(density(mcmcw.post_samples_eps), col = "royalblue", lty = 2, lwd = 2)
-#   lines(density(rvgaw.post_samples_eps), col = "red", lty = 2, lwd = 2)
-#   abline(v = sigma_eps, lty = 2, lwd = 2)
-#   # legend("topright", legend = c("HMC", "MCMC Whittle", "R-VGA Whittle"), 
-#   #        col = c("deepskyblue", "royalblue", "red"), lty = c(1, 2, 2))
-#   
-#   dev.off()
-# } 
-
-
-# ## Trajectories
-mu_phi <- sapply(rvgaw_results$mu, function(x) x[1])
-mu_sigma_eta <- sapply(rvgaw_results$mu, function(x) x[2])
-mu_sigma_eps <- sapply(rvgaw_results$mu, function(x) x[3])
-if (transform == "arctanh") {
-  mu_phi <- tanh(mu_phi)
-  # rvgae_mu <- tanh(unlist(rvgae_results$mu)[plot_range])
-} else { # logit transform
-  # rvgae_mu <- unlist(rvgae_results$mu)[plot_range]
-  # rvgae_mu <- exp(rvgae_mu) / (1 + exp(rvgae_mu))
-  # rvgaw_mu <- unlist(rvgaw_results$mu)
-  mu_phi <- exp(mu_phi) / (1 + exp(mu_phi))
-}
-mu_sigma_eta <- sqrt(exp(mu_sigma_eta))
-mu_sigma_eps <- sqrt(exp(mu_sigma_eps))
-plot_range <- 1:length(mu_phi) #400:1000#floor(n/2)
-# if (reorder_freq) {
-#   plot_title <- c("Trajectories with randomly reordered frequencies")
-# } else {
-#   plot_title <- c("Trajectories with original order of frequencies")
-# }
-
-if (plot_trajectory) {
-  par(mfrow = c(1,3))
-  plot(mu_phi[plot_range], type = "l",
-       ylab = "phi", xlab = "Iterations", main = "Trajectory of phi")
-  abline(h = phi, lty = 2)
-  
-  plot(mu_sigma_eta[plot_range], type = "l",
-       ylab = "sigma_eta", xlab = "Iterations", main = "Trajectory of sigma_eta")
-  abline(h = sigma_eta, lty = 2)
-  
-  plot(mu_sigma_eps[plot_range], type = "l",
-       ylab = "sigma_eps", xlab = "Iterations", main = "Trajectory of sigma_eps")
-  abline(h = sigma_eps, lty = 2)
-}
-
-## ggplot version
 param_names <- c("phi", "sigma_eta", "sigma_eps")
 param_dim <- length(param_names)
 rvgaw.df <- data.frame(phi = rvgaw.post_samples_phi, 
@@ -526,7 +399,6 @@ for (p in 1:param_dim) {
   true_vals.df <- data.frame(name = param_names[p], val = param_values[p])
   
   plot <- ggplot(rvgaw.df, aes(x=.data[[param_names[p]]])) +
-    # plot <- ggplot(exact_rvgal.df, aes(x=colnames(exact_rvgal.df)[p])) + 
     geom_density(col = "red", lwd = 1) +
     geom_density(data = hmcw.df, col = "goldenrod", lwd = 1) +
     geom_density(data = hmc.df, col = "deepskyblue", lwd = 1) +
@@ -536,8 +408,6 @@ for (p in 1:param_dim) {
     theme_bw() +
     theme(axis.title = element_blank(), text = element_text(size = 24)) +
     scale_x_continuous(breaks = scales::pretty_breaks(n = 4))
-  # theme(legend.position="bottom") + 
-  # scale_color_manual(values = c('RVGA' = 'red', 'HMC' = 'blue'))
   
   plots[[p]] <- plot  
 }
@@ -599,7 +469,7 @@ vars <- lapply(vars, editGrob, gp = gpar(col = "black", fontsize = 24))
 gp <- gtable_add_cols(gr3, unit(1.5, "lines"), 0)
 gp <- gtable_add_rows(gp, unit(1.5, "lines"), -1) #0 adds on the top
 
-gtable_show_layout(gp)
+# gtable_show_layout(gp)
 
 # Add the label grobs.
 # The labels on the left should be rotated; hence the edit.
@@ -618,4 +488,32 @@ if (save_plots) {
   png(filepath, width = 800, height = 600)
   grid.draw(gp)
   dev.off()
+}
+
+## Trajectories
+if (plot_trajectories) {
+  mu_phi <- sapply(rvgaw_results$mu, function(x) x[1])
+  mu_sigma_eta <- sapply(rvgaw_results$mu, function(x) x[2])
+  mu_sigma_eps <- sapply(rvgaw_results$mu, function(x) x[3])
+  if (transform == "arctanh") {
+    mu_phi <- tanh(mu_phi)
+  } else { # logit transform
+    mu_phi <- exp(mu_phi) / (1 + exp(mu_phi))
+  }
+  mu_sigma_eta <- sqrt(exp(mu_sigma_eta))
+  mu_sigma_eps <- sqrt(exp(mu_sigma_eps))
+  plot_range <- 1:length(mu_phi) #400:1000#floor(n/2)
+
+  par(mfrow = c(1,3))
+  plot(mu_phi[plot_range], type = "l",
+       ylab = "phi", xlab = "Iterations", main = "Trajectory of phi")
+  abline(h = phi, lty = 2)
+  
+  plot(mu_sigma_eta[plot_range], type = "l",
+       ylab = "sigma_eta", xlab = "Iterations", main = "Trajectory of sigma_eta")
+  abline(h = sigma_eta, lty = 2)
+  
+  plot(mu_sigma_eps[plot_range], type = "l",
+       ylab = "sigma_eps", xlab = "Iterations", main = "Trajectory of sigma_eps")
+  abline(h = sigma_eps, lty = 2)
 }

@@ -19,7 +19,6 @@ library(gridExtra)
 library(gtable)
 
 source("./source/compute_whittle_likelihood_sv.R")
-# source("./source/run_rvgaw_sv_tf.R")
 source("./source/run_rvgaw_sv_tf.R")
 
 source("./source/run_mcmc_sv.R")
@@ -65,22 +64,19 @@ plot_likelihood_surface <- F
 prior_type <- ""
 transform <- "arctanh"
 plot_trajectories <- F
-use_welch <- F
 
 ## Flags
 rerun_rvgaw <- F
 rerun_mcmcw <- F
-# rerun_mcmce <- F
 rerun_hmc <- F
 rerun_hmcw <- F
 
 save_rvgaw_results <- F
 save_mcmcw_results <- F
-# save_mcmce_results <- F
 save_hmc_results <- F
 save_hmcw_results <- F
 
-save_plots <- T
+save_plots <- F
 
 ## Result directory
 # result_directory <- paste0("./results/", prior_type, "/")
@@ -133,24 +129,6 @@ phi <- sv_data$phi
 sigma_eta <- sv_data$sigma_eta
 sigma_eps <- sv_data$sigma_eps
 
-## Welch's
-
-# # load example data:
-# data(sunspots)
-# # compute and plot the "plain" spectrum:
-# spec1 <- empiricalSpectrum(sunspots)
-# plot(spec1$frequency, spec1$power, type="l")
-
-# # plot Welch spectrum using segments of length 10 years:
-# spec2 <- welchPSD(sunspots, seglength=10)
-# lines(spec2$frequency, spec2$power, col="red")
-
-# par(mfrow = c(2,1))
-# plot(y, type = "l")
-# plot(x, type = "l")
-
-
-
 ## Test likelihood computation
 if (plot_likelihood_surface) {
   param_grid <- seq(0.01, 0.99, length.out = 100)
@@ -181,10 +159,6 @@ if (plot_likelihood_surface) {
 
   browser()
 }
-# 
-# test_eps <- rnorm(10000, 0, 1)
-# test_xi <- log(test_eps^2)
-# var(test_xi)
 
 # # Test exact likelihood
 # phi_grid <- seq(0.01, 0.99, length.out = 100)
@@ -235,7 +209,7 @@ if (plot_prior) {
 ##                R-VGA               ##
 ########################################
 
-S <- 5000L
+S <- 1000L
 
 if (use_tempering) {
   n_temper <- 10
@@ -250,12 +224,6 @@ if (use_tempering) {
   
 } else {
   temper_info <- ""
-}
-
-if (use_welch) {
-  welch_info <- "_welch"
-} else {
-  welch_info <- ""
 }
 
 if (reorder == "random") {
@@ -282,7 +250,6 @@ if (rerun_rvgaw) {
                                 n_temper = n_temper,
                                 temper_schedule = temper_schedule, 
                                 transform = transform)
-                                # use_welch = use_welch)
   
   if (save_rvgaw_results) {
     saveRDS(rvgaw_results, rvgaw_filepath)
