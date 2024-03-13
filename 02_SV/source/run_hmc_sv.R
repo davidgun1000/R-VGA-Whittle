@@ -1,5 +1,6 @@
 run_hmc_sv <- function(data, transform = "logit",
-                       prior_mean, prior_var, iters, burn_in) {
+                       prior_mean, prior_var, 
+                       iters = 10000, burn_in = 5000, n_chains = 1) {
   
   y <- data
   
@@ -49,11 +50,11 @@ run_hmc_sv <- function(data, transform = "logit",
   
   fit_stan_multi_sv <- sv_model$sample(
     sv_data,
-    chains = 1,
+    chains = n_chains,
     threads = parallel::detectCores(),
     refresh = 100,
     iter_warmup = burn_in,
-    iter_sampling = n_post_samples
+    iter_sampling = iters
   )
   
   stan_results <- list(draws = fit_stan_multi_sv$draws(variables = c("phi", "sigma_eta")),

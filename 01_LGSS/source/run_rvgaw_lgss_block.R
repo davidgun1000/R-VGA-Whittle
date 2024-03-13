@@ -8,7 +8,7 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
                            reorder, reorder_seed = 2024,
                            n_reorder = NULL,
                            decreasing = F,
-                           n_indiv = 100,
+                           n_indiv = NULL,
                            nblocks = NULL) {
     print("Starting R-VGA with Whittle likelihood...")
 
@@ -76,9 +76,6 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
 
     all_blocks <- as.list(1:length(freq))
 
-    # if (is.null(nblocks)) {
-    #     nblocks <- length(freq)
-    # } else {
     if (!is.null(nblocks)) {
         # Split frequencies into blocks
         # Last block may not have the same size as the rest
@@ -87,18 +84,24 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
         indiv <- list()
         vec <- c()
         if (reorder == 0) { # leave the first n_indiv frequencies alone, cut the rest into blocks
-            indiv <- as.list(1:n_indiv)
-            vec <- (n_indiv+1):length(freq)
-            blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
-            all_blocks <- c(indiv, blocks) 
+            
+            if (n_indiv == 0) {
+                vec <- (n_indiv+1):length(freq)
+                blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+                all_blocks <- blocks
+            } else {
+                indiv <- as.list(1:n_indiv)
+                vec <- (n_indiv+1):length(freq)
+                blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+                all_blocks <- c(indiv, blocks)    
+            }
+             
         } else if (reorder == "decreasing") { # leave the last n_indiv frequencies alone, cut the rest into blocks
             indiv <- as.list((length(freq) - n_indiv):length(freq))
             vec <- 1:(length(freq) - n_indiv)
             blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
             all_blocks <- c(blocks, indiv)
         }
-        
-        
     }
     
     n_updates <- length(all_blocks)
@@ -150,7 +153,8 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
             I_i_tf <- tf$constant(I[blockinds])
 
         
-            tf_out_test <- compute_grad_arctanh_test(samples_tf, I_i_tf, freq_i_tf)
+            tf_out_test <- compute_grad_arctanh_test(samples_tf, I_i_tf, freq_i_tf,
+                                                     blocksize = length(blockinds))
             E_grad_tf <- tf_out_test$E_grad
             E_hessian_tf <- tf_out_test$E_hessian
 
@@ -237,32 +241,32 @@ log_likelihood_arctanh <- function(theta_phi, theta_eta, theta_eps,
 
 
 compute_grad_arctanh_test <- tf_function(
-    compute_grad_arctanh_test <- function(samples_tf, I_i, freq_i) {
+    compute_grad_arctanh_test <- function(samples_tf, I_i, freq_i, blocksize) {
         log_likelihood_tf <- 0
         with(tf$GradientTape() %as% tape2, {
             with(tf$GradientTape(persistent = TRUE) %as% tape1, {
                 S <- as.integer(nrow(samples_tf))
                 
-                nfreq <- as.integer(length(freq_i))
+                # nfreq <- as.integer(length(freq_i))
                 phi_s <- tf$math$tanh(samples_tf[, 1])
                 phi_s <- tf$reshape(phi_s, c(length(phi_s), 1L, 1L)) # S x 1 x 1
-                freq_i <- tf$reshape(freq_i, c(1L, nfreq, 1L)) # 1 x blocksize x 1
+                freq_i <- tf$reshape(freq_i, c(1L, blocksize, 1L)) # 1 x blocksize x 1
                
                 sigma_eta2_s <- tf$math$exp(samples_tf[, 2])
                 sigma_eta2_s <- tf$reshape(sigma_eta2_s, c(dim(sigma_eta2_s), 1L, 1L))
-                sigma_eta2_tiled <- tf$tile(sigma_eta2_s, c(1L, nfreq, 1L))
+                sigma_eta2_tiled <- tf$tile(sigma_eta2_s, c(1L, blocksize, 1L))
             
                 spec_dens_x_tf <- tf$math$divide(sigma_eta2_tiled, 
-                                                1 + tf$tile(tf$math$square(phi_s), c(1L, nfreq, 1L)) -
+                                                1 + tf$tile(tf$math$square(phi_s), c(1L, blocksize, 1L)) -
                                                 tf$math$multiply(2, tf$math$multiply(phi_s, tf$math$cos(freq_i))))
 
                 ## add spec_dens_eps here
                 spec_dens_eps_tf <- tf$math$exp(samples_tf[, 3])
                 spec_dens_eps_tf <- tf$reshape(spec_dens_eps_tf, c(S, 1L, 1L))
                 ## then
-                spec_dens_y_tf <- spec_dens_x_tf + tf$tile(spec_dens_eps_tf, c(1L, nfreq, 1L))
+                spec_dens_y_tf <- spec_dens_x_tf + tf$tile(spec_dens_eps_tf, c(1L, blocksize, 1L))
 
-                I_i <- tf$reshape(I_i, c(1L, nfreq, 1L))
+                I_i <- tf$reshape(I_i, c(1L, blocksize, 1L))
                 I_tile <- tf$tile(I_i, c(S, 1L, 1L))
                 log_likelihood_tf <- -tf$math$log(spec_dens_y_tf) - tf$multiply(I_i, tf$math$reciprocal(spec_dens_y_tf))
 

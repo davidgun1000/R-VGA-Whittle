@@ -1,5 +1,6 @@
 run_hmc_sv <- function(data, transform = "logit",
-                       prior_mean, prior_var, iters, burn_in, n_chains = 1) {
+                       prior_mean, prior_var, 
+                       iters = 10000, burn_in = 5000, n_chains = 1) {
   
   y <- data
   

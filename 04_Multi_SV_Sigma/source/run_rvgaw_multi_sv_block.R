@@ -63,21 +63,55 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   
   freq <- reordered_freq
   I <- reordered_I 
- 
   
-  for (i in 1:length(freq)) {
+  all_blocks <- as.list(1:length(freq))
+  
+  if (!is.null(nblocks)) {
+    # Split frequencies into blocks
+    # Last block may not have the same size as the rest
+    # if the number of frequencies to be divided into blocks
+    # is not divisible by the number of blocks
+    indiv <- list()
+    vec <- c()
+    if (reorder == 0) { # leave the first n_indiv frequencies alone, cut the rest into blocks
+      indiv <- as.list(1:n_indiv)
+      vec <- (n_indiv+1):length(freq)
+      blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+      all_blocks <- c(indiv, blocks) 
+    } else if (reorder == "decreasing") { # leave the last n_indiv frequencies alone, cut the rest into blocks
+      indiv <- as.list((length(freq) - n_indiv):length(freq))
+      vec <- 1:(length(freq) - n_indiv)
+      blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+      all_blocks <- c(blocks, indiv)
+    }
+  }
+  
+  # browser()
+  if (use_tempering) {
+    if (temper_first) {
+      cat("Damping the first ", n_temper, "frequencies... \n")
+    } else {
+      cat("Damping the last ", n_temper, "frequencies... \n")
+    }
+  }
+  
+  n_updates <- length(all_blocks)
+  for (i in 1:n_updates) {
+    cat("i =", i, "\n")
+    blockinds <- all_blocks[[i]]
     
-    # cat("i =", i, "\n")
+    # if (i == 106) {
+    #   browser()
+    # }
+    
     a_vals <- 1
     if (use_tempering) {
       if (temper_first) {
         if (i <= n_temper) { # only temper the first n_temper observations
-          cat("Damping the first ", n_temper, "frequencies...")
           a_vals <- temper_schedule
         }  
       } else {
         if (i > length(freq) - n_temper) { # only temper the first n_temper observations
-          cat("Damping the last ", n_temper, "frequencies...")
           a_vals <- temper_schedule
         }
       }
@@ -97,13 +131,15 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
       samples <- rmvnorm(S, mu_temp, P)
       
       samples_tf <- tf$Variable(samples)
-      I_tf <- tf$Variable(I[,,i])
-      freq_tf <- tf$Variable(freq[i])
-      
+     
+      I_tf <- tf$Variable(I[,,blockinds])
+      freq_tf <- tf$Variable(freq[blockinds])
+     
       tf_out <- compute_grad_hessian(samples_tf, I_i = I_tf, freq_i = freq_tf,
+                                      blocksize = length(blockinds),
                                      use_cholesky = use_cholesky, 
                                      transform = transform)
-      
+         
       grads_tf <- tf_out$grad
       hessians_tf <- tf_out$hessian
       
@@ -136,17 +172,17 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
     rvgaw.prec[[i+1]] <- prec_temp
     rvgaw.mu_vals[[i+1]] <- mu_temp
     
-    if (i %% floor(length(freq)/10) == 0) {
-      cat(floor(i/length(freq) * 100), "% complete \n")
+    if (i %% floor(n_updates+1/10) == 0) {
+      cat(floor(i/n_updates+1 * 100), "% complete \n")
     }
     
   }
   rvgaw.t2 <- proc.time()
   
   ## Posterior samples
-  rvgaw.post_var <- chol2inv(chol(rvgaw.prec[[length(freq)]]))
+  rvgaw.post_var <- chol2inv(chol(rvgaw.prec[[n_updates+1]]))
   
-  rvgaw.post_samples <- rmvnorm(n_post_samples, rvgaw.mu_vals[[length(freq)]], rvgaw.post_var) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
+  rvgaw.post_samples <- rmvnorm(n_post_samples, rvgaw.mu_vals[[n_updates+1]], rvgaw.post_var) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
   
   ## Construct A and Sigma_eta from these posterior samples
   ## Maybe this should be done in tensorflow?

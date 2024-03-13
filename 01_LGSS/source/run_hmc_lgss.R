@@ -1,4 +1,4 @@
-run_hmc_lgss <- function(data, iters, burn_in) {
+run_hmc_lgss <- function(data, iters = 10000, burn_in = 5000, n_chains = 1) {
   
   y <- data
   
@@ -41,11 +41,11 @@ run_hmc_lgss <- function(data, iters, burn_in) {
   
   fit_stan_lgss <- lgss_model$sample(
     lgss_data,
-    chains = 1,
+    chains = n_chains,
     threads = parallel::detectCores(),
-    refresh = 5,
+    refresh = 100,
     iter_warmup = burn_in,
-    iter_sampling = n_post_samples
+    iter_sampling = iters
   )
   
   stan_results <- list(draws = fit_stan_lgss$draws(variables = c("phi", "sigma_eta", "sigma_eps")),

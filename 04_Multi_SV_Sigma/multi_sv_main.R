@@ -15,33 +15,40 @@ transform <- "arctanh"
 prior_type <- "prior1"
 use_heaps_mapping <- F
 plot_likelihood_surface <- F
-plot_prior_samples <- T
+plot_prior_samples <- F
 plot_trace <- F
 plot_trajectories <- F
-save_plots <- T
+save_plots <- F
 
 rerun_rvgaw <- F
 rerun_mcmcw <- F
 rerun_hmc <- F
-rerun_hmcw <- F
+rerun_hmcw <- T
 
 save_rvgaw_results <- F
 save_mcmcw_results <- F
 save_hmc_results <- F
-save_hmcw_results <- F
+save_hmcw_results <- T
 
 ## R-VGAW flags
-use_tempering <- T
+use_tempering <- T #T
 temper_first <- T
 reorder <- 0 #"decreasing"
 reorder_seed <- 2024
 # decreasing <- T
 use_median <- F
+nblocks <- 100
+n_indiv <- 100
 
-library("mvtnorm")
-library("astsa")
-library("stcos")
-library("coda")
+## HMC flags
+n_post_samples <- 10000
+burn_in <- 5000
+n_chains <- 2
+
+library(mvtnorm)
+library(astsa)
+library(stcos)
+library(coda)
 library(Matrix)
 # library("expm")
 reticulate::use_condaenv("myenv", required = TRUE)
@@ -49,18 +56,27 @@ library(tensorflow)
 tfp <- import("tensorflow_probability")
 tfd <- tfp$distributions
 library(keras)
-library("cmdstanr")
+library(cmdstanr)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(gtable)
 
-source("./source/run_rvgaw_multi_sv.R")
+# source("./source/run_rvgaw_multi_sv.R")
+source("./source/run_rvgaw_multi_sv_block.R")
+
 source("./source/run_mcmc_multi_sv.R")
 source("./source/compute_whittle_likelihood_multi_sv.R")
+source("./source/compute_periodogram.R")
 # source("./source/run_mcmc_sv.R")
 # source("./source/compute_whittle_likelihood_sv.R")
 source("./source/construct_prior2.R")
 # source("./source/map_functions.R")
 source("./source/construct_Sigma.R")
 # source("./archived/compute_partial_whittle_likelihood.R")
-source("./source/compute_grad_hessian.R")
+# source("./source/compute_grad_hessian.R")
+source("./source/compute_grad_hessian_block.R")
+
 
 # List physical devices
 gpus <- tf$config$experimental$list_physical_devices('GPU')
@@ -203,11 +219,11 @@ if (plot_prior_samples) {
   #   return(Sigma_eta)
   # }
   
-  # Sigma_eta_prior_samples <- lapply(prior_samples_list, construct_Sigma_eta, d = d)
+  Sigma_eta_prior_samples <- lapply(prior_samples_list, construct_Sigma_eta, d = d)
   # sigma11 <- lapply(Sigma_eta_prior_samples, function(x) x[1,1])
   # sorted <- sort(unlist(sigma11))
   # sorted[250]
-  browser()
+  
   ## Transform samples of A into samples of Phi via the mapping in Ansley and Kohn (1986)
   # Phi_prior_samples <- mapply(backward_map, A_prior_samples, Sigma_eta_prior_samples, SIMPLIFY = F)
   
@@ -352,7 +368,7 @@ if (plot_likelihood_surface) {
     }
     
   }
-  browser()
+  # browser()
   # par(mfrow = c(1,1))
   # plot(param_grid, llh, type = "l", main = "sigma_eta_22", ylab = "Log likelihood", xlab = "Parameter")
   # abline(v = Sigma_eta[2,2], lty = 2)
@@ -399,14 +415,20 @@ if (reorder == "random") {
   reorder_info <- ""
 }
 
-S <- 5000L
+if (!is.null(nblocks)) {
+  block_info <- paste0("_", nblocks, "blocks", n_indiv, "indiv")
+} else {
+  block_info <- ""
+}
+
+S <- 1000L
 a_vals <- 1
 
 ################ R-VGA starts here #################
 print("Starting R-VGAL with Whittle likelihood...")
 
 rvgaw_filepath <- paste0(result_directory, "rvga_whittle_results_Tfin", Tfin, 
-                         temper_info, reorder_info, "_", date, "_", dataset, 
+                         temper_info, reorder_info, block_info, "_", date, "_", dataset, 
                          prior_type, ".rds")
 
 if (rerun_rvgaw) {
@@ -476,9 +498,9 @@ print("Starting MCMC with Whittle likelihood...")
 mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_results_Tfin", Tfin, 
                          "_", date, "_", dataset, prior_type, ".rds")
 
-n_post_samples <- 50000
-burn_in <- 50000
-iters <- n_post_samples + burn_in
+# n_post_samples <- 50000
+# burn_in <- 50000
+iters <- (n_post_samples + burn_in) * n_chains
 
 if (rerun_mcmcw) {
   mcmcw_results <- run_mcmc_multi_sv(data = Y, iters = iters, burn_in = burn_in, 
@@ -528,12 +550,11 @@ print("Starting HMC...")
 hmc_filepath <- paste0(result_directory, "hmc_results_Tfin", Tfin, 
                        "_", date, "_", dataset, prior_type, ".rds")
 
-
 if (rerun_hmc) {
   
-  n_post_samples <- 10000
-  burn_in <- 5000
-  stan.iters <- n_post_samples + burn_in
+  # n_post_samples <- 10000
+  # burn_in <- 5000
+  # stan.iters <- n_post_samples + burn_in
   d <- as.integer(ncol(Y))
   
   use_chol <- 0
@@ -566,26 +587,26 @@ if (rerun_hmc) {
   
   fit_stan_multi_sv <- multi_sv_model$sample(
     multi_sv_data,
-    chains = 1,
+    chains = n_chains,
     threads = parallel::detectCores(),
-    refresh = 5,
+    refresh = 100,
     iter_warmup = burn_in,
     iter_sampling = n_post_samples
   )
   
-  stan_results <- list(draws = fit_stan_multi_sv$draws(variables = c("Phi_mat", "Sigma_eta_mat")),
+  hmc_results <- list(draws = fit_stan_multi_sv$draws(variables = c("Phi_mat", "Sigma_eta_mat")),
                        time = fit_stan_multi_sv$time)
   
   if (save_hmc_results) {
-    saveRDS(stan_results, hmc_filepath)
+    saveRDS(hmc_results, hmc_filepath)
   }
   
 } else {
-  stan_results <- readRDS(hmc_filepath)
+  hmc_results <- readRDS(hmc_filepath)
 }
 
-hmc.post_samples_Phi <- stan_results$draws[,,1:(d^2)]
-hmc.post_samples_Sigma_eta <- stan_results$draws[,,(d^2+1):(2*d^2)]
+hmc.post_samples_Phi <- hmc_results$draws[,,1:(d^2)]
+hmc.post_samples_Sigma_eta <- hmc_results$draws[,,(d^2+1):(2*d^2)]
 
 ######################################
 ##   Stan with Whittle likelihood   ##
@@ -597,22 +618,26 @@ hmcw_filepath <- paste0(result_directory, "hmcw_results_Tfin", Tfin,
 
 if (rerun_hmcw) {
   
-  n_post_samples <- 10000
-  burn_in <- 5000
-  stan.iters <- n_post_samples + burn_in
+  # n_post_samples <- 10000
+  # burn_in <- 5000
+  # stan.iters <- n_post_samples + burn_in
   
   stan_file_whittle <- "./source/stan_multi_sv_whittle.stan"
   
   # ## Calculation of Whittle likelihood
-  ## Fourier frequencies
-  k <- seq(-ceiling(Tfin/2)+1, floor(Tfin/2), 1)
-  k_in_likelihood <- k [k >= 1 & k <= floor((Tfin-1)/2)]
-  freq <- 2 * pi * k_in_likelihood / Tfin
+  # ## Fourier frequencies
+  # k <- seq(-ceiling(Tfin/2)+1, floor(Tfin/2), 1)
+  # k_in_likelihood <- k [k >= 1 & k <= floor((Tfin-1)/2)]
+  # freq <- 2 * pi * k_in_likelihood / Tfin
   
-  # ## astsa package
-  Z <- log(Y^2) - colMeans(log(Y^2))
-  fft_out <- mvspec(Z, detrend = F, plot = F)
-  I <- fft_out$fxx
+  # # ## astsa package
+  # Z <- log(Y^2) - colMeans(log(Y^2))
+  # fft_out <- mvspec(Z, detrend = F, plot = F)
+  # I <- fft_out$fxx
+
+  pgram_out <- compute_periodogram(Y)
+  freq <- pgram_out$freq
+  I <- pgram_out$periodogram
   
   I_indices <- seq(dim(I)[3])
   I_list <- lapply(I_indices[1:length(freq)], function(x) I[,,x])
@@ -647,26 +672,26 @@ if (rerun_hmcw) {
   
   fit_stan_multi_sv_whittle <- multi_sv_model_whittle$sample(
     multi_sv_data_whittle,
-    chains = 1,
+    chains = n_chains,
     threads = parallel::detectCores(),
     refresh = 100,
     iter_warmup = burn_in,
     iter_sampling = n_post_samples
   )
   
-  stan_whittle_results <- list(draws = fit_stan_multi_sv_whittle$draws(variables = c("Phi_mat", "Sigma_eta_mat")),
+  hmcw_results <- list(draws = fit_stan_multi_sv_whittle$draws(variables = c("Phi_mat", "Sigma_eta_mat")),
                        time = fit_stan_multi_sv_whittle$time())
   
   if (save_hmcw_results) {
-    saveRDS(stan_whittle_results, hmcw_filepath)
+    saveRDS(hmcw_results, hmcw_filepath)
   }
   
 } else {
-  stan_whittle_results <- readRDS(hmcw_filepath)
+  hmcw_results <- readRDS(hmcw_filepath)
 }
 
-hmcw.post_samples_Phi <- stan_whittle_results$draws[,,1:(d^2)]
-hmcw.post_samples_Sigma_eta <- stan_whittle_results$draws[,,(d^2+1):(2*d^2)]
+hmcw.post_samples_Phi <- hmcw_results$draws[,,1:(d^2)]
+hmcw.post_samples_Sigma_eta <- hmcw_results$draws[,,(d^2+1):(2*d^2)]
 
 # ## Posterior density comparisons
 # 
@@ -757,56 +782,56 @@ hmcw.post_samples_Sigma_eta <- stan_whittle_results$draws[,,(d^2+1):(2*d^2)]
 
 
 
-## Plot posterior estimates
-indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
-hmc_indices <- diag(matrix(1:d^2, d, d, byrow = T))
-par(mfrow = c(d+1,d))
+# ## Plot posterior estimates
+# indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
+# hmc_indices <- diag(matrix(1:d^2, d, d, byrow = T))
+# par(mfrow = c(d+1,d))
 
-plot_margin <- c(-0.02, 0.02)
+# plot_margin <- c(-0.02, 0.02)
 
-### Posterior of diagonal entries of Phi  
-for (k in 1:d) {    
-  rvgaw.post_samples_phi <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[k,k]))
-  mcmcw.post_samples_phi <- unlist(lapply(mcmcw.post_samples_Phi, function(x) x[k,k]))
-  # hmc.post_samples_phi <- unlist(lapply(hmc.post_samples_Phi, function(x) x[k,k]))
+# ### Posterior of diagonal entries of Phi  
+# for (k in 1:d) {    
+#   rvgaw.post_samples_phi <- unlist(lapply(rvgaw.post_samples_Phi, function(x) x[k,k]))
+#   mcmcw.post_samples_phi <- unlist(lapply(mcmcw.post_samples_Phi, function(x) x[k,k]))
+#   # hmc.post_samples_phi <- unlist(lapply(hmc.post_samples_Phi, function(x) x[k,k]))
   
-  ind <- paste0(k,k)
-  plot(density(rvgaw.post_samples_phi), col = "red", lty = 3, lwd = 2, 
-       main = bquote(phi[.(ind)])) #, xlim = Phi[k,k] + plot_margin)
-  lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 3, lwd = 2)
+#   ind <- paste0(k,k)
+#   plot(density(rvgaw.post_samples_phi), col = "red", lty = 3, lwd = 2, 
+#        main = bquote(phi[.(ind)])) #, xlim = Phi[k,k] + plot_margin)
+#   lines(density(mcmcw.post_samples_phi), col = "royalblue", lty = 3, lwd = 2)
   
-  lines(density(hmc.post_samples_Phi[,,hmc_indices[k]]), col = "deepskyblue", lty = 1, lwd = 2)
-  lines(density(hmcw.post_samples_Phi[,,hmc_indices[k]]), col = "goldenrod", lty = 1, lwd = 2)
+#   lines(density(hmc.post_samples_Phi[,,hmc_indices[k]]), col = "deepskyblue", lty = 1, lwd = 2)
+#   lines(density(hmcw.post_samples_Phi[,,hmc_indices[k]]), col = "goldenrod", lty = 1, lwd = 2)
   
-  abline(v = Phi[k,k], lty = 2, lwd = 2)
-  # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
-  #        lty = c(2,2,1), cex = 0.7)
-}
+#   abline(v = Phi[k,k], lty = 2, lwd = 2)
+#   # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
+#   #        lty = c(2,2,1), cex = 0.7)
+# }
 
-### Posterior of Sigma_eta
-# par(mfrow = c(1,d))
-hmc_indices <- c(matrix(1:(d^2), d, d)) #c(1,5,9)
-plot_margin <- c(-0.1, 0.1)
+# ### Posterior of Sigma_eta
+# # par(mfrow = c(1,d))
+# hmc_indices <- c(matrix(1:(d^2), d, d)) #c(1,5,9)
+# plot_margin <- c(-0.1, 0.1)
 
-# for (k in 1:d) {
-for (k in 1:nrow(indices)) {
-  i <- indices[k, 1]
-  j <- indices[k, 2]
+# # for (k in 1:d) {
+# for (k in 1:nrow(indices)) {
+#   i <- indices[k, 1]
+#   j <- indices[k, 2]
   
-  rvgaw.post_samples_sigma_eta <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[i,j]))
-  mcmcw.post_samples_sigma_eta <- unlist(lapply(mcmcw.post_samples_Sigma_eta, function(x) x[i,j]))
+#   rvgaw.post_samples_sigma_eta <- unlist(lapply(rvgaw.post_samples_Sigma_eta, function(x) x[i,j]))
+#   mcmcw.post_samples_sigma_eta <- unlist(lapply(mcmcw.post_samples_Sigma_eta, function(x) x[i,j]))
   
-  ind <- paste0(i,j)
-  plot(density(rvgaw.post_samples_sigma_eta), col = "red", lty = 3, lwd = 2, 
-       main = bquote(sigma_eta[.(ind)])) #, xlim = Sigma_eta[i,j] + plot_margin)
-  lines(density(mcmcw.post_samples_sigma_eta), col = "royalblue", lty = 3, lwd = 2)
-  lines(density(hmc.post_samples_Sigma_eta[,,hmc_indices[k]]), lty = 1, col = "deepskyblue", lwd = 2)
-  lines(density(hmcw.post_samples_Sigma_eta[,,hmc_indices[k]]), lty = 1, col = "goldenrod", lwd = 2)
+#   ind <- paste0(i,j)
+#   plot(density(rvgaw.post_samples_sigma_eta), col = "red", lty = 3, lwd = 2, 
+#        main = bquote(sigma_eta[.(ind)])) #, xlim = Sigma_eta[i,j] + plot_margin)
+#   lines(density(mcmcw.post_samples_sigma_eta), col = "royalblue", lty = 3, lwd = 2)
+#   lines(density(hmc.post_samples_Sigma_eta[,,hmc_indices[k]]), lty = 1, col = "deepskyblue", lwd = 2)
+#   lines(density(hmcw.post_samples_Sigma_eta[,,hmc_indices[k]]), lty = 1, col = "goldenrod", lwd = 2)
   
-  abline(v = Sigma_eta[i,j], lty = 2, lwd = 2)
-  # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
-  #        lty = c(2,2,1), cex = 0.3, y.intersp = 0.25)
-}
+#   abline(v = Sigma_eta[i,j], lty = 2, lwd = 2)
+#   # legend("topright", legend = c("R-VGAW", "HMC"), col = c("red", "forestgreen"),
+#   #        lty = c(2,2,1), cex = 0.3, y.intersp = 0.25)
+# }
 
 if (plot_trace) { # for mcmcw
   
@@ -961,7 +986,6 @@ names(rvgaw.df) <- param_names
 names(hmc.df) <- param_names
 names(hmcw.df) <- param_names
 
-## ggplot version
 
 plots <- list()
 
@@ -1057,3 +1081,10 @@ if (save_plots) {
   grid.draw(gp)
   dev.off()
 }
+
+## Timings
+rvgaw.time <- rvgaw_results$time_elapsed[3]
+hmcw.time <- sum(hmcw_results$time$chains$total)
+hmc.time <- sum(hmc_results$time()$chains$total)
+print(data.frame(method = c("R-VGA", "HMCW", "HMC"),
+                 time = c(rvgaw.time, hmcw.time, hmc.time)))

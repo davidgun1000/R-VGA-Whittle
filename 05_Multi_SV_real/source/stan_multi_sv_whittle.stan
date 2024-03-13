@@ -181,7 +181,7 @@ functions {
       log_likelihood += get_real(log_likelihood_k); 
       
     }
-    print("log_likelihood =", log_likelihood);
+    //print("log_likelihood =", log_likelihood);
     //log_likelihood = get_real(log_likelihood);
     return log_likelihood;
     

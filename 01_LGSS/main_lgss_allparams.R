@@ -68,7 +68,7 @@ save_hmc_results <- F
 save_hmcw_results <- F
 
 plot_likelihood_surface <- F
-plot_trajectories <- T
+plot_trajectories <- F
 save_plots <- F
 
 ## R-VGA flags
@@ -81,6 +81,8 @@ transform <- "arctanh"
 
 ## MCMC flags
 adapt_proposal <- T
+n_post_samples <- 20000
+burn_in <- 10000
 
 ## True parameters
 sigma_eps <- 0.5 # measurement error var
@@ -129,8 +131,8 @@ sigma_eps <- lgss_data$sigma_eps
 sigma_eta <- lgss_data$sigma_eta
 
 ## MCMC settings
-burn_in <- 1000
-n_post_samples <- 10000
+n_post_samples <- 20000
+burn_in <- 10000
 MCMC_iters <- n_post_samples + burn_in # Number of MCMC iterations
 
 ## Prior
@@ -200,7 +202,7 @@ nblocks <- 100
 n_indiv <- 100
 
 if (use_tempering) {
-  n_temper <- 10
+  n_temper <- 5
   K <- 100
   temper_schedule <- rep(1/K, K)
   temper_info <- ""
@@ -224,8 +226,14 @@ if (reorder == "random") {
   reorder_info <- ""
 }
 
+if (!is.null(nblocks)) {
+  block_info <- paste0("_", nblocks, "blocks", n_indiv, "indiv")
+} else {
+  block_info <- ""
+}
+
 rvgaw_filepath <- paste0(result_directory, "rvga_whittle_results_", transform, "_n", n,
-                         "_phi", phi_string, temper_info, reorder_info, "_", date, ".rds")
+                         "_phi", phi_string, temper_info, reorder_info, block_info, "_", date, ".rds")
 
 if (rerun_rvgaw) {
   rvgaw_results <- run_rvgaw_lgss(y = y, #sigma_eta = sigma_eta, sigma_eps = sigma_eps, 
@@ -287,17 +295,19 @@ hmc_filepath <- paste0(result_directory, "hmc_results_n", n,
 
 # n_post_samples <- 10000
 # burn_in <- 1000
-stan.iters <- n_post_samples + burn_in
-
+# stan.iters <- n_post_samples + burn_in
+n_chains <- 2
 if (rerun_hmc) {
-  stan_results <- run_hmc_lgss(data = y, iters = stan.iters, burn_in = burn_in)
+  hmc_results <- run_hmc_lgss(data = y, 
+                                iters = n_post_samples / n_chains, 
+                                burn_in = burn_in / n_chains)
   
   if (save_hmc_results) {
-    saveRDS(stan_results, hmc_filepath)
+    saveRDS(hmc_results, hmc_filepath)
   }
   
 } else {
-  stan_results <- readRDS(hmc_filepath)
+  hmc_results <- readRDS(hmc_filepath)
 }
 
 # hmc.fit <- extract(hfit, pars = c("theta_phi", "theta_sigma"),
@@ -306,9 +316,9 @@ if (rerun_hmc) {
 # hmc.theta_phi <- hmc.fit[,,1]
 # hmc.theta_sigma <- hmc.fit[,,2]
 
-hmc.post_samples_phi <- stan_results$draws[,,1]#tanh(hmc.theta_phi)
-hmc.post_samples_eta <- stan_results$draws[,,2]#sqrt(exp(hmc.theta_sigma))
-hmc.post_samples_eps <- stan_results$draws[,,3]#sqrt(exp(hmc.theta_sigma))
+hmc.post_samples_phi <- hmc_results$draws[,,1]#tanh(hmc.theta_phi)
+hmc.post_samples_eta <- hmc_results$draws[,,2]#sqrt(exp(hmc.theta_sigma))
+hmc.post_samples_eps <- hmc_results$draws[,,3]#sqrt(exp(hmc.theta_sigma))
 
 #######################################################
 ##          HMC with the Whittle likelihood          ##
@@ -345,11 +355,11 @@ if (rerun_hmcw) {
   
   fit_stan_lgss_whittle <- whittle_lgss_model$sample(
     whittle_lgss_data,
-    chains = 1,
+    chains = n_chains,
     threads = parallel::detectCores(),
     refresh = 100,
-    iter_warmup = burn_in,
-    iter_sampling = n_post_samples
+    iter_warmup = burn_in / n_chains,
+    iter_sampling = n_post_samples / n_chains
   )
   
   hmcw_results <- list(draws = fit_stan_lgss_whittle$draws(variables = c("phi", "sigma_eta", "sigma_eps")),
@@ -366,9 +376,9 @@ if (rerun_hmcw) {
   hmcw_results <- readRDS(hmcw_filepath)
 }
 
-hmcw.post_samples_phi <- hmcw_results$draws[,,1]
-hmcw.post_samples_eta <- hmcw_results$draws[,,2]
-hmcw.post_samples_eps <- hmcw_results$draws[,,3]
+hmcw.post_samples_phi <- c(hmcw_results$draws[,,1])
+hmcw.post_samples_eta <- c(hmcw_results$draws[,,2])
+hmcw.post_samples_eps <- c(hmcw_results$draws[,,3])
 
 ################################################################################
 ##                            Posterior densities                             ##
@@ -517,3 +527,10 @@ if (plot_trajectories) {
        ylab = "sigma_eps", xlab = "Iterations", main = "Trajectory of sigma_eps")
   abline(h = sigma_eps, lty = 2)
 }
+
+## Timing comparison
+rvgaw.time <- rvgaw_results$time_elapsed[3]
+hmcw.time <- sum(hmcw_results$time()$chains$total)
+hmc.time <- sum(hmc_results$time()$chains$total)
+print(data.frame(method = c("R-VGA", "HMCW", "HMC"),
+                 time = c(rvgaw.time, hmcw.time, hmc.time)))

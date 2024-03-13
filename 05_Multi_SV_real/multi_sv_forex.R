@@ -23,14 +23,17 @@ library(gridExtra)
 library(gtable)
 
 
-source("./source/run_rvgaw_multi_sv.R")
+# source("./source/run_rvgaw_multi_sv.R")
+source("./source/run_rvgaw_multi_sv_block.R")
 source("./source/run_mcmc_multi_sv.R")
 source("./source/compute_whittle_likelihood_multi_sv.R")
 source("./source/construct_prior2.R")
 source("./source/map_functions.R")
 source("./source/construct_Sigma.R")
 # source("./archived/compute_partial_whittle_likelihood.R")
-source("./source/compute_grad_hessian.R")
+# source("./source/compute_grad_hessian.R")
+source("./source/compute_grad_hessian_block.R")
+
 
 # List physical devices
 gpus <- tf$config$experimental$list_physical_devices('GPU')
@@ -58,7 +61,7 @@ use_cholesky <- T # use lower Cholesky factor to parameterise Sigma_eta
 # prior_type <- "minnesota"
 use_heaps_mapping <- F
 plot_likelihood_surface <- F
-plot_prior_samples <- T
+plot_prior_samples <- F
 plot_trajectories <- F
 plot_trace <- F
 transform <- "arctanh"
@@ -84,6 +87,13 @@ reorder <- 0 #"decreasing"
 reorder_seed <- 2024
 # decreasing <- F
 use_median <- F
+nblocks <- 100
+n_indiv <- 100
+
+## HMC flags
+n_post_samples <- 10000
+burn_in <- 5000
+n_chains <- 2
 
 #########################
 ##      Read data      ##
@@ -361,7 +371,7 @@ if (plot_likelihood_surface) {
 ################################
 
 if (use_tempering) {
-  n_temper <- 10
+  n_temper <- 5
   K <- 100
   temper_schedule <- rep(1/K, K)
   temper_info <- paste0("_temper", n_temper)
@@ -379,14 +389,20 @@ if (reorder == "random") {
   reorder_info <- ""
 }
 
-S <- 5000L
+if (!is.null(nblocks)) {
+  block_info <- paste0("_", nblocks, "blocks", n_indiv, "indiv")
+} else {
+  block_info <- ""
+}
+
+S <- 1000L
 a_vals <- 1
 
 ################ R-VGA starts here #################
 print("Starting R-VGAL with Whittle likelihood...")
 
 rvgaw_filepath <- paste0(result_directory, "rvga_whittle_forex",  
-                         temper_info, reorder_info, "_", date, ".rds")
+                         temper_info, reorder_info, block_info, "_", date, ".rds")
 
 if (rerun_rvgaw) {
   rvgaw_results <- run_rvgaw_multi_sv(data = Y_demeaned, prior_mean = prior_mean, 
@@ -398,8 +414,8 @@ if (rerun_rvgaw) {
                                       reorder = reorder, 
                                       # decreasing = decreasing,
                                       reorder_seed = reorder_seed,
-                                      transform = transform,
-                                      use_median = use_median)
+                                      nblocks = nblocks,
+                                      n_indiv = n_indiv)
   if (save_rvgaw_results) {
     saveRDS(rvgaw_results, rvgaw_filepath)
   }
@@ -445,10 +461,10 @@ print("Starting MCMC with Whittle likelihood...")
 mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_forex", 
                          "_", date, ".rds")
 
-n_post_samples <- 10000
-burn_in <- 10000
+# n_post_samples <- 10000
+# burn_in <- 10000
 # n_chains <- 2
-iters <- n_post_samples + burn_in
+iters <- (n_post_samples + burn_in) * n_chains
 
 if (rerun_mcmcw) {
   mcmcw_results <- run_mcmc_multi_sv(data = Y_demeaned, iters = iters, burn_in = burn_in, 
@@ -510,10 +526,6 @@ hmc_filepath <- paste0(result_directory, "hmc_forex",
 
 if (rerun_hmc) {
   
-  n_post_samples <- 10000
-  burn_in <- 20000
-  n_chains <- 1
-  stan.iters <- n_post_samples + burn_in
   d <- as.integer(ncol(Y_demeaned))
   
   use_chol <- 0
@@ -542,19 +554,19 @@ if (rerun_hmc) {
     iter_sampling = n_post_samples
   )
   
-  stan_results <- list(draws = fit_stan_multi_sv$draws(variables = c("Phi_mat", "Sigma_eta_mat")),
+  hmc_results <- list(draws = fit_stan_multi_sv$draws(variables = c("Phi_mat", "Sigma_eta_mat")),
                        time = fit_stan_multi_sv$time)
   
   if (save_hmc_results) {
-    saveRDS(stan_results, hmc_filepath)
+    saveRDS(hmc_results, hmc_filepath)
   }
   
 } else {
-  stan_results <- readRDS(hmc_filepath)
+  hmc_results <- readRDS(hmc_filepath)
 }
 
-hmc.post_samples_Phi <- stan_results$draws[,,1:(d^2)]
-hmc.post_samples_Sigma_eta <- stan_results$draws[,,(d^2+1):(2*d^2)]
+hmc.post_samples_Phi <- hmc_results$draws[,,1:(d^2)]
+hmc.post_samples_Sigma_eta <- hmc_results$draws[,,(d^2+1):(2*d^2)]
 
 ######################################
 ##   Stan with Whittle likelihood   ##
@@ -565,10 +577,6 @@ hmcw_filepath <- paste0(result_directory, "hmcw_forex",
 
 if (rerun_hmcw) {
   print("Starting HMC with Whittle likelihood...")
-  
-  n_post_samples <- 10000
-  burn_in <- 1000
-  stan.iters <- n_post_samples + burn_in
   
   stan_file_whittle <- "./source/stan_multi_sv_whittle.stan"
   
@@ -615,27 +623,26 @@ if (rerun_hmcw) {
   
   fit_stan_multi_sv_whittle <- multi_sv_model_whittle$sample(
     multi_sv_data_whittle,
-    chains = 1,
+    chains = n_chains,
     threads = parallel::detectCores(),
     refresh = 100,
     iter_warmup = burn_in,
     iter_sampling = n_post_samples
   )
   
-  stan_whittle_results <- list(draws = fit_stan_multi_sv_whittle$draws(variables = c("Phi_mat", "Sigma_eta_mat")),
+  hmcw_results <- list(draws = fit_stan_multi_sv_whittle$draws(variables = c("Phi_mat", "Sigma_eta_mat")),
                        time = fit_stan_multi_sv_whittle$time)
   
   if (save_hmcw_results) {
-    saveRDS(stan_whittle_results, hmcw_filepath)
+    saveRDS(hmcw_results, hmcw_filepath)
   }
   
 } else {
-  stan_whittle_results <- readRDS(hmcw_filepath)
+  hmcw_results <- readRDS(hmcw_filepath)
 }
 
-hmcw.post_samples_Phi <- stan_whittle_results$draws[,,1:4]
-hmcw.post_samples_Sigma_eta <- stan_whittle_results$draws[,,5:8]
-
+hmcw.post_samples_Phi <- hmcw_results$draws[,,1:(d^2)]
+hmcw.post_samples_Sigma_eta <- hmcw_results$draws[,,(d^2+1):(2*d^2)]
 
 # ## Plot posterior estimates
 # indices <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d))
@@ -735,18 +742,18 @@ hmcw.post_samples_Sigma_eta <- stan_whittle_results$draws[,,5:8]
 #   }
 #   
 #   ## HMC trace plots
-  hmc.post_samples_phi11 <- as.vector(hmc.post_samples_Phi[,,1])
-  hmc.post_samples_phi22 <- as.vector(hmc.post_samples_Phi[,,4])
-  coda::traceplot(coda::as.mcmc(hmc.post_samples_phi11), ylab = "phi_11")
-  coda::traceplot(coda::as.mcmc(hmc.post_samples_phi22), ylab = "phi_22")
+  # hmc.post_samples_phi11 <- as.vector(hmc.post_samples_Phi[,,1])
+  # hmc.post_samples_phi22 <- as.vector(hmc.post_samples_Phi[,,4])
+  # coda::traceplot(coda::as.mcmc(hmc.post_samples_phi11), ylab = "phi_11")
+  # coda::traceplot(coda::as.mcmc(hmc.post_samples_phi22), ylab = "phi_22")
   
-  hmc.post_samples_sigma_eta11 <- as.vector(hmc.post_samples_Sigma_eta[,,1])
-  hmc.post_samples_sigma_eta21 <- as.vector(hmc.post_samples_Sigma_eta[,,2])
-  hmc.post_samples_sigma_eta22 <- as.vector(hmc.post_samples_Sigma_eta[,,4])
+  # hmc.post_samples_sigma_eta11 <- as.vector(hmc.post_samples_Sigma_eta[,,1])
+  # hmc.post_samples_sigma_eta21 <- as.vector(hmc.post_samples_Sigma_eta[,,2])
+  # hmc.post_samples_sigma_eta22 <- as.vector(hmc.post_samples_Sigma_eta[,,4])
   
-  coda::traceplot(coda::as.mcmc(hmc.post_samples_sigma_eta11), ylab = "sigma_eta_11")
-  coda::traceplot(coda::as.mcmc(hmc.post_samples_sigma_eta21), ylab = "sigma_eta_21")
-  coda::traceplot(coda::as.mcmc(hmc.post_samples_sigma_eta22), ylab = "sigma_eta_22")
+  # coda::traceplot(coda::as.mcmc(hmc.post_samples_sigma_eta11), ylab = "sigma_eta_11")
+  # coda::traceplot(coda::as.mcmc(hmc.post_samples_sigma_eta21), ylab = "sigma_eta_21")
+  # coda::traceplot(coda::as.mcmc(hmc.post_samples_sigma_eta22), ylab = "sigma_eta_22")
 #   
 # }
 # 
@@ -943,7 +950,7 @@ if (save_plots) {
 
 ## Timings
 rvgaw.time <- rvgaw_results$time_elapsed[3]
-hmcw.time <- stan_whittle_results$time()$chains$total
-hmc.time <- stan_results$time()$chains$total
+hmcw.time <- hmcw_results$time()$chains$total
+hmc.time <- hmc_results$time()$chains$total
 print(data.frame(method = c("R-VGA", "HMCW", "HMC"),
                  time = c(rvgaw.time, hmcw.time, hmc.time)))

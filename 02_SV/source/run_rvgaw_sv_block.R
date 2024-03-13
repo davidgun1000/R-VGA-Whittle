@@ -1,11 +1,13 @@
 run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL, 
                          prior_mean = 0, prior_var = 1, 
-                         deriv = "tf", S = 500,
+                         deriv = "tf", n_post_samples = 10000,
+                         S = 500,
                          use_tempering = T, temper_first = T, 
                          temper_schedule = rep(1/10, 10),
                          n_temper = 100,
                          reorder = "random", reorder_seed = 2023,
-                         transform = "arctanh") {
+                         transform = "arctanh",
+                         nblocks = NULL, n_indiv = NULL) {
   
   print("Starting R-VGAL with Whittle likelihood...")
   
@@ -67,9 +69,40 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
     }
   }
   
-  for (i in 1:length(freq)) {
+  all_blocks <- as.list(1:length(freq))
+  
+  if (!is.null(nblocks)) {
+    # Split frequencies into blocks
+    # Last block may not have the same size as the rest
+    # if the number of frequencies to be divided into blocks
+    # is not divisible by the number of blocks
+    indiv <- list()
+    vec <- c()
+    if (reorder == 0) { # leave the first n_indiv frequencies alone, cut the rest into blocks
+      vec <- (n_indiv+1):length(freq)
+      blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+      if (n_indiv == 0) {
+        all_blocks <- blocks
+      } else {
+        indiv <- as.list(1:n_indiv)
+        all_blocks <- c(indiv, blocks)    
+      }
+    } else if (reorder == "decreasing") { # leave the last n_indiv frequencies alone, cut the rest into blocks
+      indiv <- as.list((length(freq) - n_indiv):length(freq))
+      vec <- 1:(length(freq) - n_indiv)
+      blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+      all_blocks <- c(blocks, indiv)
+    }
+  }
+  
+  n_updates <- length(all_blocks)
+  for (i in 1:n_updates) {
+    cat("i =", i, "\n")
+    blockinds <- all_blocks[[i]]
     
-    # cat("i =", i, "\n")
+    # if (i == 126) {
+    #   browser()
+    # }
     
     a_vals <- 1
     if (use_tempering) {
@@ -80,7 +113,7 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
         }  
       } else {
         if (i > length(freq) - n_temper) { # only temper the first n_temper observations
-        
+          
           a_vals <- temper_schedule
         }
       }
@@ -115,7 +148,7 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
         
         grad_expr <- Deriv(log_likelihood_fun, c("theta_phi", "theta_eta"))
         grad2_expr <- Deriv(grad_expr, c("theta_phi", "theta_eta"))
-      
+        
         # Gradient
         grad_deriv <- mapply(grad_expr, theta_phi = theta_phi, 
                              theta_eta = theta_eta, theta_xi = theta_xi,
@@ -138,7 +171,7 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
         E_hessian <- E_hessian_deriv
         
       } else { ## Tensorflow
-              
+        
         tf.t1 <- proc.time()
         
         theta_phi_tf <- tf$Variable(theta_phi)
@@ -147,19 +180,21 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
         
         samples_tf <- tf$Variable(samples, dtype = "float32")
         
-        freq_i_tf <- tf$Variable(freq[i])
-        I_i_tf <- tf$Variable(I[[i]])
+        freq_i_tf <- tf$constant(freq[blockinds])
+        I_i_tf <- tf$constant(I[blockinds])
         
         if (transform == "arctanh") {
-          tf_out <- compute_grad_arctanh(samples_tf, I_i_tf, freq_i_tf)
+          # tf_out <- compute_grad_arctanh(samples_tf, I_i_tf, freq_i_tf)
+          tf_out <- compute_grad_arctanh_block(samples_tf, I_i_tf, freq_i_tf,
+                                               blocksize = length(blockinds))
+          
         } else { # use logit
           tf_out <- compute_grad_logit(samples_tf, I_i_tf, freq_i_tf)
         }
         
-        # browser()
-        
         grads_tf <- tf_out$grad
         hessians_tf <- tf_out$hessian
+        
         E_grad_tf <- tf$reduce_mean(grads_tf, 0L)
         E_hessian_tf <- tf$reduce_mean(hessians_tf, 0L)
         
@@ -178,26 +213,24 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
       
       mu_temp <- mu_temp + chol2inv(chol(prec_temp)) %*% (a * E_grad)
       # mu_temp <- mu_temp + 1/prec_temp * (a * E_grad)
-        
+      
     }  
     
     rvgaw.prec[[i+1]] <- prec_temp
     rvgaw.mu_vals[[i+1]] <- mu_temp
     
-    if (i %% floor(length(freq)/10) == 0) {
-      cat(floor(i/length(freq) * 100), "% complete \n")
+    if (i %% floor(n_updates/10) == 0) {
+      cat(floor(i/n_updates * 100), "% complete \n")
     }
     
   }
   
   rvgaw.t2 <- proc.time()
   
- 
-  
   ## Posterior samples
-  rvgaw.post_var <- chol2inv(chol(rvgaw.prec[[length(freq)+1]]))
+  rvgaw.post_var <- chol2inv(chol(rvgaw.prec[[n_updates+1]]))
   
-  theta.post_samples <- rmvnorm(10000, rvgaw.mu_vals[[length(freq)+1]], rvgaw.post_var) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
+  theta.post_samples <- rmvnorm(10000, rvgaw.mu_vals[[n_updates+1]], rvgaw.post_var) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
   
   if (transform == "arctanh") {
     rvgaw.post_samples_phi <- tanh(theta.post_samples[, 1])
@@ -225,7 +258,7 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
 }
 
 log_likelihood_fun <- function(theta_phi, theta_eta, theta_xi, transform,
-                                   omega_k, I_k) { 
+                               omega_k, I_k) { 
   
   phi <- 0
   if (transform == "arctanh") {
@@ -243,35 +276,61 @@ log_likelihood_fun <- function(theta_phi, theta_eta, theta_xi, transform,
   llh <- - log(spec_dens_y) - I_k / spec_dens_y
 }
 
-# compute_grad_arctanh <- tf_function(
-#   testf <- function(theta_phi, theta_eta, theta_xi, I_i, freq_i) {
-#     with (tf$GradientTape() %as% tape2, {
-#       with (tf$GradientTape(persistent = TRUE) %as% tape1, {
-#         
-#         phi <- tf$math$tanh(theta_phi)
-#         spec_dens_x_tf <- tf$math$divide(tf$math$exp(theta_eta), 1 + tf$math$square(phi) -
-#                                            tf$math$multiply(2, tf$math$multiply(phi, tf$math$cos(freq_i))))
-#         
-#         ## add spec_dens_xi here
-#         spec_dens_xi_tf <- tf$math$exp(theta_xi)
-#         
-#         ## then
-#         spec_dens_y_tf <- spec_dens_x_tf + spec_dens_xi_tf
-#         
-#         log_likelihood_tf <- - tf$math$log(spec_dens_y_tf) - tf$multiply(I_i, tf$math$reciprocal(spec_dens_y_tf))
-#         
-#       })
-#       grad_tf %<-% tape1$gradient(log_likelihood_tf, c(theta_phi, theta_eta))
-#       
-#       grad_tf <- tf$reshape(grad_tf, c(2L, dim(grad_tf[[1]])))
-#     })
-#     grad2_tf %<-% tape2$jacobian(grad_tf, c(theta_phi, theta_eta))
-#     
-#     return(list(llh = log_likelihood_tf, 
-#                 grad = grad_tf,
-#                 hessian = grad2_tf))
-#   }
-# )
+compute_grad_arctanh_block <- tf_function(
+  compute_grad_arctanh_block <- function(samples_tf, I_i, freq_i, blocksize) {
+    log_likelihood_tf <- 0
+    with(tf$GradientTape() %as% tape2, {
+      with(tf$GradientTape(persistent = TRUE) %as% tape1, {
+        
+        S <- as.integer(nrow(samples_tf))
+        
+        # nfreq <- as.integer(length(freq_i))
+        phi_s <- tf$math$tanh(samples_tf[, 1])
+        phi_s <- tf$reshape(phi_s, c(length(phi_s), 1L, 1L)) # S x 1 x 1
+        freq_i <- tf$reshape(freq_i, c(1L, blocksize, 1L)) # 1 x blocksize x 1
+        
+        sigma_eta2_s <- tf$math$exp(samples_tf[, 2])
+        sigma_eta2_s <- tf$reshape(sigma_eta2_s, c(dim(sigma_eta2_s), 1L, 1L))
+        sigma_eta2_tiled <- tf$tile(sigma_eta2_s, c(1L, blocksize, 1L))
+        
+        spec_dens_x_tf <- tf$math$divide(sigma_eta2_tiled, 
+                                         1 + tf$tile(tf$math$square(phi_s), c(1L, blocksize, 1L)) -
+                                           tf$math$multiply(2, tf$math$multiply(phi_s, tf$math$cos(freq_i))))
+        
+        ## add spec_dens_eps here
+        theta_xi <- tf$constant(pi^2/2, shape = c(1L, 1L, 1L))
+        spec_dens_xi_tf <- tf$tile(theta_xi, c(S, blocksize, 1L))
+        
+        # spec_dens_eps_tf <- tf$math$exp(samples_tf[, 3])
+        # spec_dens_eps_tf <- tf$reshape(spec_dens_eps_tf, c(S, 1L, 1L))
+        ## then
+        spec_dens_y_tf <- spec_dens_x_tf + spec_dens_xi_tf #tf$tile(spec_dens_eps_tf, c(1L, nfreq, 1L))
+        
+        I_i <- tf$reshape(I_i, c(1L, blocksize, 1L))
+        I_tile <- tf$tile(I_i, c(S, 1L, 1L))
+        log_likelihood_tf <- -tf$math$log(spec_dens_y_tf) - tf$multiply(I_i, tf$math$reciprocal(spec_dens_y_tf))
+        
+        log_likelihood_tf <- tf$math$reduce_sum(log_likelihood_tf, 1L) # sum all log likelihoods over the block
+      })
+      grad_tf %<-% tape1$gradient(log_likelihood_tf, samples_tf)
+      # grad_tf <- tf$reshape(tf$transpose(grad_tf), c(dim(grad_tf[[1]]), 3L))
+    })
+    
+    grad2_tf %<-% tape2$batch_jacobian(grad_tf, samples_tf)
+    # grad2_tf %<-% tape2$batch_jacobian(grad_tf, vars)
+    
+    E_grad_tf <- tf$reduce_mean(grad_tf, 0L)
+    E_hessian_tf <- tf$reduce_mean(grad2_tf, 0L)
+    
+    return(list(
+      log_likelihood = log_likelihood_tf,
+      grad = grad_tf,
+      hessian = grad2_tf,
+      E_grad = E_grad_tf,
+      E_hessian = E_hessian_tf
+    ))
+  }
+)
 
 
 compute_grad_arctanh <- tf_function(

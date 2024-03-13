@@ -18,10 +18,11 @@ library(gridExtra)
 library(gtable)
 
 source("./source/compute_whittle_likelihood_sv.R")
-source("./source/run_rvgaw_sv_tf.R")
+# source("./source/run_rvgaw_sv_tf.R")
+source("./source/run_rvgaw_sv_block.R")
 source("./source/run_mcmc_sv.R")
 source("./source/run_hmc_sv.R")
-
+source("./source/compute_periodogram.R")
 # source("./source/run_corr_pmmh_sv.R")
 source("./source/particleFilter.R")
 
@@ -54,7 +55,6 @@ dataset <- "exrates"
 use_tempering <- T
 temper_first <- T
 reorder <- 0 #"decreasing"
-# decreasing <- F
 reorder_seed <- 2024
 # n_reorder <- 10
 plot_likelihood_surface <- F
@@ -65,7 +65,7 @@ plot_trajectories <- F
 use_welch <- F
 
 ## Flags
-rerun_rvgaw <- F
+rerun_rvgaw <- T
 rerun_mcmcw <- F
 # rerun_mcmce <- F
 rerun_hmc <- F
@@ -76,6 +76,12 @@ save_mcmcw_results <- F
 save_hmc_results <- F
 save_hmcw_results <- F
 save_plots <- F
+
+n_post_samples <- 20000 # across chains
+burn_in <- 10000 # across chains
+
+nblocks <- 100
+n_indiv <- 100
 
 ## Result directory
 if (dataset == "sp100") {
@@ -144,6 +150,7 @@ y <- y - mean(y)
 
 # par(mfrow = c(2,1))
 plot(y, type = "l")
+
 # plot(x, type = "l")
 
 ## Test likelihood computation
@@ -183,7 +190,7 @@ if (plot_likelihood_surface) {
 S <- 1000L
 
 if (use_tempering) {
-  n_temper <- 10
+  n_temper <- 5
   K <- 100
   temper_schedule <- rep(1/K, K)
   temper_info <- ""
@@ -205,6 +212,12 @@ if (reorder == "random") {
   reorder_info <- paste0("_reorder", reorder)
 } else {
   reorder_info <- ""
+}
+
+if (!is.null(nblocks)) {
+  block_info <- paste0("_", nblocks, "blocks", n_indiv, "indiv")
+} else {
+  block_info <- ""
 }
 
 ## Prior
@@ -246,11 +259,12 @@ if (plot_prior) {
 # hist(prior_eta)
 
 rvgaw_filepath <- paste0(result_directory, "rvga_uni_real_results_n", n,
-                         temper_info, reorder_info, prior_info, "_", date, ".rds")
+                         temper_info, reorder_info, block_info, prior_info, "_", date, ".rds")
 
 if (rerun_rvgaw) {
   rvgaw_results <- run_rvgaw_sv(y = y, #sigma_eta = sigma_eta, sigma_eps = sigma_eps, 
                                 prior_mean = prior_mean, prior_var = prior_var, 
+                                n_post_samples = n_post_samples,
                                 deriv = "tf", S = S, 
                                 reorder = reorder,
                                 reorder_seed = reorder_seed,
@@ -259,7 +273,9 @@ if (rerun_rvgaw) {
                                 n_temper = n_temper,
                                 temper_schedule = temper_schedule, 
                                 transform = transform,
-                                use_welch = use_welch)
+                                # use_welch = use_welch,
+                                nblocks = nblocks,
+                                n_indiv = n_indiv)
   
   if (save_rvgaw_results) {
     saveRDS(rvgaw_results, rvgaw_filepath)
@@ -282,8 +298,8 @@ mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_results_n", n, prior_in
 
 adapt_proposal <- T
 
-n_post_samples <- 10000
-burn_in <- 5000
+# n_post_samples <- 10000
+burn_in <- burn_in
 MCMC_iters <- n_post_samples + burn_in
 
 # prior_mean <- rep(0, 3)
@@ -363,14 +379,12 @@ mcmcw.post_samples_eta <- as.mcmc(mcmcw_results$post_samples$sigma_eta[-(1:burn_
 hmc_filepath <- paste0(result_directory, "hmc_results_n", n, prior_info,
                         "_", date, ".rds")
 
-n_post_samples <- 5000 # per chain
-burn_in <- 15000 # per chain
 n_chains <- 2
-# transform01 <- 0
 
 if (rerun_hmc) {
   hmc_results <- run_hmc_sv(data = y, transform = transform,
-                             iters = n_post_samples, burn_in = burn_in,
+                             iters = n_post_samples / n_chains, 
+                             burn_in = burn_in / n_chains,
                              n_chains = n_chains,
                              prior_mean = prior_mean, prior_var = prior_var)
   
@@ -392,21 +406,26 @@ hmcw_filepath <- paste0(result_directory, "hmcw_results_n", n, prior_type,
                         "_", date, ".rds")
 
 if (rerun_hmcw) {
-  n_post_samples <- 10000 # per chain
-  burn_in <- 1000 # per chain
-  n_chains <- 1
+  # n_chains <- 2
+  # hmc_iters <- n_post_samples / n_chains
+  # burn_in <- 5000 # per chain
 
-  ## Fourier frequencies
-  k <- seq(-ceiling(n/2)+1, floor(n/2), 1)
-  k_in_likelihood <- k[k >= 1 & k <= floor((n-1)/2)]
-  freq <- 2 * pi * k_in_likelihood / n
+  # Compute periodogram
+  pgram_out <- compute_periodogram(y)
+  freq <- pgram_out$freq
+  I <- pgram_out$periodogram
 
-  ## Fourier transform of the observations
-  y_tilde <- log(y^2) - mean(log(y^2))
+  # ## Fourier frequencies
+  # k <- seq(-ceiling(n/2)+1, floor(n/2), 1)
+  # k_in_likelihood <- k[k >= 1 & k <= floor((n-1)/2)]
+  # freq <- 2 * pi * k_in_likelihood / n
 
-  fourier_transf <- fft(y_tilde)
-  periodogram <- 1/n * Mod(fourier_transf)^2
-  I <- periodogram[k_in_likelihood + 1]
+  # ## Fourier transform of the observations
+  # y_tilde <- log(y^2) - mean(log(y^2))
+
+  # fourier_transf <- fft(y_tilde)
+  # periodogram <- 1/n * Mod(fourier_transf)^2
+  # I <- periodogram[k_in_likelihood + 1]
 
   whittle_stan_file <- "./source/stan_sv_whittle.stan"
   # whittle_stan_file <- "./source/stan_mwe.stan" # this was to test the use of complex numbers
@@ -431,8 +450,8 @@ if (rerun_hmcw) {
     chains = n_chains,
     threads = parallel::detectCores(),
     refresh = 100,
-    iter_warmup = burn_in,
-    iter_sampling = n_post_samples
+    iter_warmup = burn_in / n_chains,
+    iter_sampling = n_post_samples / n_chains
   )
 
   hmcw_results <- list(draws = fit_stan_multi_sv_whittle$draws(variables = c("phi", "sigma_eta")),
@@ -630,7 +649,7 @@ if (save_plots) {
 }
 
 rvgaw.time <- rvgaw_results$time_elapsed[3]
-hmcw.time <- hmcw_results$time()$chains$total
-hmc.time <- hmc_results$time()$chains$total
+hmcw.time <- sum(hmcw_results$time()$chains$total)
+hmc.time <- sum(hmc_results$time()$chains$total)
 print(data.frame(method = c("R-VGA", "HMCW", "HMC"),
                  time = c(rvgaw.time, hmcw.time, hmc.time)))
