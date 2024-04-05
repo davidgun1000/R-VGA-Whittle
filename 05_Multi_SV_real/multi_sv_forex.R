@@ -9,7 +9,7 @@ library("mvtnorm")
 library("astsa")
 library("cmdstanr")
 # library("expm")
-library("stcos")
+# library("stcos")
 # library(dplyr)
 reticulate::use_condaenv("myenv", required = TRUE)
 library(tensorflow)
@@ -33,6 +33,7 @@ source("./source/construct_Sigma.R")
 # source("./archived/compute_partial_whittle_likelihood.R")
 # source("./source/compute_grad_hessian.R")
 source("./source/compute_grad_hessian_block.R")
+source("./source/compute_periodogram.R")
 
 
 # List physical devices
@@ -61,14 +62,14 @@ use_cholesky <- T # use lower Cholesky factor to parameterise Sigma_eta
 # prior_type <- "minnesota"
 use_heaps_mapping <- F
 plot_likelihood_surface <- F
-plot_prior_samples <- F
+plot_prior_samples <- T
 plot_trajectories <- F
 plot_trace <- F
 transform <- "arctanh"
 prior_type <- "prior1"
 
 # reread_data <- F
-rerun_rvgaw <- F
+rerun_rvgaw <- T
 rerun_mcmcw <- F
 rerun_hmc <- F
 rerun_hmcw <- F
@@ -87,7 +88,8 @@ reorder <- 0 #"decreasing"
 reorder_seed <- 2024
 # decreasing <- F
 use_median <- F
-nblocks <- 100
+# nblocks <- 100
+blocksize <- 500
 n_indiv <- 100
 
 ## HMC flags
@@ -389,8 +391,10 @@ if (reorder == "random") {
   reorder_info <- ""
 }
 
-if (!is.null(nblocks)) {
-  block_info <- paste0("_", nblocks, "blocks", n_indiv, "indiv")
+# if (!is.null(nblocks)) {
+if (!is.null(blocksize)) {
+  # block_info <- paste0("_", nblocks, "blocks", n_indiv, "indiv")
+  block_info <- paste0("_", "blocksize", blocksize, "_", n_indiv, "indiv")
 } else {
   block_info <- ""
 }
@@ -414,7 +418,8 @@ if (rerun_rvgaw) {
                                       reorder = reorder, 
                                       # decreasing = decreasing,
                                       reorder_seed = reorder_seed,
-                                      nblocks = nblocks,
+                                      # nblocks = nblocks,
+                                      blocksize = blocksize,
                                       n_indiv = n_indiv)
   if (save_rvgaw_results) {
     saveRDS(rvgaw_results, rvgaw_filepath)
@@ -821,9 +826,9 @@ indmat <- matrix(1:d^2, d, d, byrow = T) # number matrix elements by row
 phi_indices <- diag(indmat) # indices of diagonal elements of Phi
 sigma_indices <- indmat[lower.tri(indmat, diag = T)] # lower triangular elements of Sigma_eta
 
-rvgaw.post_samples <- matrix(NA, 10000, param_dim)
-hmc.post_samples <- matrix(NA, 10000, param_dim)
-hmcw.post_samples <- matrix(NA, 10000, param_dim)
+rvgaw.post_samples <- matrix(NA, n_post_samples * n_chains, param_dim)
+hmc.post_samples <- matrix(NA, n_post_samples * n_chains, param_dim)
+hmcw.post_samples <- matrix(NA, n_post_samples * n_chains, param_dim)
 
 # Arrange posterior samples of Phi in a matrix
 for (k in 1:length(phi_indices)) {
@@ -831,8 +836,8 @@ for (k in 1:length(phi_indices)) {
   i <- as.numeric(ind_df[r, ][1])
   j <- as.numeric(ind_df[r, ][2])
   rvgaw.post_samples[, k] <- sapply(rvgaw.post_samples_Phi, function(x) x[i,j])
-  hmc.post_samples[, k] <- hmc.post_samples_Phi[,,r]
-  hmcw.post_samples[, k] <- hmcw.post_samples_Phi[,,r]
+  hmc.post_samples[, k] <- c(hmc.post_samples_Phi[,,r])
+  hmcw.post_samples[, k] <- c(hmcw.post_samples_Phi[,,r])
 }
 
 # Arrange posterior samples of Sigma_eta in a matrix
@@ -841,8 +846,8 @@ for (k in 1:length(sigma_indices)) {
   i <- as.numeric(ind_df[r, ][1])
   j <- as.numeric(ind_df[r, ][2])
   rvgaw.post_samples[, k+d] <- sapply(rvgaw.post_samples_Sigma_eta, function(x) x[i,j])
-  hmc.post_samples[, k+d] <- hmc.post_samples_Sigma_eta[,,r]
-  hmcw.post_samples[, k+d] <- hmcw.post_samples_Sigma_eta[,,r]
+  hmc.post_samples[, k+d] <- c(hmc.post_samples_Sigma_eta[,,r])
+  hmcw.post_samples[, k+d] <- c(hmcw.post_samples_Sigma_eta[,,r])
 }
 rvgaw.df <- as.data.frame(rvgaw.post_samples)
 hmc.df <- as.data.frame(hmc.post_samples)
@@ -940,7 +945,7 @@ grid.newpage()
 grid.draw(gp)
 
 if (save_plots) {
-  plot_file <- paste0("multi_sv_real_posterior", temper_info, reorder_info,
+  plot_file <- paste0("multi_sv_real_posterior", temper_info, reorder_info, block_info,
                       "_", transform, "_", date, ".png")
   filepath = paste0("./plots/", plot_file)
   png(filepath, width = 1200, height = 900)
@@ -950,7 +955,7 @@ if (save_plots) {
 
 ## Timings
 rvgaw.time <- rvgaw_results$time_elapsed[3]
-hmcw.time <- hmcw_results$time()$chains$total
-hmc.time <- hmc_results$time()$chains$total
+hmcw.time <- sum(hmcw_results$time()$chains$total)
+hmc.time <- sum(hmc_results$time()$chains$total)
 print(data.frame(method = c("R-VGA", "HMCW", "HMC"),
                  time = c(rvgaw.time, hmcw.time, hmc.time)))

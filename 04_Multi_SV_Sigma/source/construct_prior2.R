@@ -17,7 +17,9 @@ construct_prior <- function(data, prior_type = "prior1",
   if (prior_type == "prior0") {
     prior_mean <- rep(0, param_dim)
   } else {
+    # prior_mean <- c(rep(2, m), rep(-3, m), rep(0, m*(m-1)/2))
     prior_mean <- c(rep(2, m), rep(-3, m), rep(0, m*(m-1)/2))
+    
   }
   
   # Prior var for the AR parameters

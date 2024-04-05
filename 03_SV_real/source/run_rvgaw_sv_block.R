@@ -7,7 +7,7 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
                          n_temper = 100,
                          reorder = "random", reorder_seed = 2023,
                          transform = "arctanh",
-                         nblocks = NULL, n_indiv = NULL) {
+                         nblocks = NULL, blocksize = NULL, n_indiv = NULL) {
   
   print("Starting R-VGAL with Whittle likelihood...")
   
@@ -71,7 +71,9 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
   
   all_blocks <- as.list(1:length(freq))
   
-  if (!is.null(nblocks)) {
+  # if (!is.null(nblocks)) {
+  if (!is.null(blocksize)) {
+      
     # Split frequencies into blocks
     # Last block may not have the same size as the rest
     # if the number of frequencies to be divided into blocks
@@ -79,14 +81,20 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
     indiv <- list()
     vec <- c()
     if (reorder == 0) { # leave the first n_indiv frequencies alone, cut the rest into blocks
-      indiv <- as.list(1:n_indiv)
       vec <- (n_indiv+1):length(freq)
-      blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
-      all_blocks <- c(indiv, blocks) 
+      # blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+      blocks <- split(vec, ceiling(seq_along(vec)/blocksize))
+      if (n_indiv == 0) {
+        all_blocks <- blocks
+      } else {
+        indiv <- as.list(1:n_indiv)
+        all_blocks <- c(indiv, blocks)    
+      }
     } else if (reorder == "decreasing") { # leave the last n_indiv frequencies alone, cut the rest into blocks
       indiv <- as.list((length(freq) - n_indiv):length(freq))
       vec <- 1:(length(freq) - n_indiv)
-      blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+      # blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+      blocks <- split(vec, ceiling(seq_along(vec)/blocksize))
       all_blocks <- c(blocks, indiv)
     }
   }
@@ -226,7 +234,7 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
   ## Posterior samples
   rvgaw.post_var <- chol2inv(chol(rvgaw.prec[[n_updates+1]]))
   
-  theta.post_samples <- rmvnorm(10000, rvgaw.mu_vals[[n_updates+1]], rvgaw.post_var) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
+  theta.post_samples <- rmvnorm(n_post_samples, rvgaw.mu_vals[[n_updates+1]], rvgaw.post_var) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
   
   if (transform == "arctanh") {
     rvgaw.post_samples_phi <- tanh(theta.post_samples[, 1])
@@ -296,7 +304,7 @@ compute_grad_arctanh_block <- tf_function(
         ## add spec_dens_eps here
         theta_xi <- tf$constant(pi^2/2, shape = c(1L, 1L, 1L))
         spec_dens_xi_tf <- tf$tile(theta_xi, c(S, blocksize, 1L))
-       
+        
         # spec_dens_eps_tf <- tf$math$exp(samples_tf[, 3])
         # spec_dens_eps_tf <- tf$reshape(spec_dens_eps_tf, c(S, 1L, 1L))
         ## then

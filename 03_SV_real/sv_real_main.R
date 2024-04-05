@@ -5,6 +5,7 @@ rm(list = ls())
 
 library(mvtnorm)
 library(coda)
+library(dplyr)
 # library(Deriv)
 # library(rstan)
 library(cmdstanr)
@@ -50,6 +51,7 @@ if (length(gpus) > 0) {
 # date <- "20230223"
 date <- "20230918"
 dataset <- "exrates"
+currency <- "NZD"
 
 ## R-VGA flags
 use_tempering <- T
@@ -61,7 +63,7 @@ plot_likelihood_surface <- F
 prior_type <- ""
 transform <- "arctanh"
 plot_prior <- T
-plot_trajectories <- F
+plot_trajectories <- T
 use_welch <- F
 
 ## Flags
@@ -69,18 +71,20 @@ rerun_rvgaw <- T
 rerun_mcmcw <- F
 # rerun_mcmce <- F
 rerun_hmc <- F
-rerun_hmcw <- F
+rerun_hmcw <- T
 
-save_rvgaw_results <- F
+save_rvgaw_results <- T
 save_mcmcw_results <- F
 save_hmc_results <- F
-save_hmcw_results <- F
+save_hmcw_results <- T
 save_plots <- F
 
-n_post_samples <- 20000 # across chains
-burn_in <- 10000 # across chains
+n_post_samples <- 10000 # per chain 
+burn_in <- 5000 # per chain
+n_chains <- 2
 
-nblocks <- 100
+# nblocks <- 100
+blocksize <- 500
 n_indiv <- 100
 
 ## Result directory
@@ -126,17 +130,22 @@ if (dataset == "sp100") {
   ## Exchange rate data
 load("./data/exrates.RData")
 
-data <- dat[, c("AUD", "NZD", "USD")]
-nrows <- nrow(data)
+# currencies <- c("AUD", "NZD", "USD", "JPY", "CAD")
+# data <- dat[, currencies]
+nrows <- nrow(dat)
 
 # Compute log returns
-data$AUD_returns <- c(0, log(data$AUD[2:nrows] / data$AUD[1:(nrows-1)])*100)
-data$NZD_returns <- c(0, log(data$NZD[2:nrows] / data$NZD[1:(nrows-1)])*100)
-data$USD_returns <- c(0, log(data$USD[2:nrows] / data$USD[1:(nrows-1)])*100)
+# data$AUD_returns <- c(0, log(data$AUD[2:nrows] / data$AUD[1:(nrows-1)])*100)
+# data$NZD_returns <- c(0, log(data$NZD[2:nrows] / data$NZD[1:(nrows-1)])*100)
+# data$USD_returns <- c(0, log(data$USD[2:nrows] / data$USD[1:(nrows-1)])*100)
+# data$JPY_returns <- c(0, log(data$JPY[2:nrows] / data$JPY[1:(nrows-1)])*100)
+# data$CAD_returns <- c(0, log(data$CAD[2:nrows] / data$CAD[1:(nrows-1)])*100)
 
-exrates <- data[-1, c("AUD_returns", "NZD_returns", "USD_returns")] # get rid of 1st row
+log_data <- mutate_all(dat, function(x) c(0, log(x[2:length(x)] / x[1:(length(x)-1)]) * 100))
+
+exrates <- log_data[-1, ] # get rid of 1st row
 # Y <- exrates[, 1:nstocks]
-y <- exrates[, "NZD_returns"]
+y <- exrates[, currency]
 } else {
   sv_data <- read.csv(file = "./data/5_Industry_Portfolios_Daily_cleaned.csv")
   y <- sv_data[1:n, "Cnsmr"]
@@ -214,8 +223,10 @@ if (reorder == "random") {
   reorder_info <- ""
 }
 
-if (!is.null(nblocks)) {
-  block_info <- paste0("_", nblocks, "blocks", n_indiv, "indiv")
+# if (!is.null(nblocks)) {
+if (!is.null(blocksize)) {
+  # block_info <- paste0("_", nblocks, "blocks", n_indiv, "indiv")
+  block_info <- paste0("_", "blocksize", blocksize, "_", n_indiv, "indiv")
 } else {
   block_info <- ""
 }
@@ -227,10 +238,12 @@ if (prior_type == "prior1") {
   prior_var <- diag(c(1, 0.5)) #diag(1, 2)
   prior_info <- paste0("_", prior_type)
 } else {
-  prior_mean <- c(2, -3) #rep(0,2)
+  prior_mean <- c(2, -3) #rep(0,2) # c(2, -3)
   # prior_mean <- c(0, -3) #rep(0,2)
   
-  prior_var <- diag(c(0.5, 0.5)) #diag(1, 2)
+  # prior_var <- diag(c(0.5, 0.5)) #diag(1, 2)
+  prior_var <- diag(c(1, 1)) #diag(1, 2)
+  
 }
 
 if (plot_prior) {
@@ -258,13 +271,13 @@ if (plot_prior) {
 # hist(prior_phi)
 # hist(prior_eta)
 
-rvgaw_filepath <- paste0(result_directory, "rvga_uni_real_results_n", n,
+rvgaw_filepath <- paste0(result_directory, "rvga_sv_real_", currency,
                          temper_info, reorder_info, block_info, prior_info, "_", date, ".rds")
 
 if (rerun_rvgaw) {
   rvgaw_results <- run_rvgaw_sv(y = y, #sigma_eta = sigma_eta, sigma_eps = sigma_eps, 
                                 prior_mean = prior_mean, prior_var = prior_var, 
-                                n_post_samples = n_post_samples,
+                                n_post_samples = n_post_samples * n_chains,
                                 deriv = "tf", S = S, 
                                 reorder = reorder,
                                 reorder_seed = reorder_seed,
@@ -274,7 +287,8 @@ if (rerun_rvgaw) {
                                 temper_schedule = temper_schedule, 
                                 transform = transform,
                                 # use_welch = use_welch,
-                                nblocks = nblocks,
+                                # nblocks = nblocks,
+                                blocksize = blocksize,
                                 n_indiv = n_indiv)
   
   if (save_rvgaw_results) {
@@ -293,60 +307,60 @@ rvgaw.post_samples_sigma_eta <- rvgaw_results$post_samples$sigma_eta
 ##                MCMC                ## 
 ########################################
 
-mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_results_n", n, prior_info,
-                         "_", date, ".rds")
+# mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_sv_real", prior_info,
+#                          "_", date, ".rds")
 
-adapt_proposal <- T
+# adapt_proposal <- T
 
-# n_post_samples <- 10000
-burn_in <- burn_in
-MCMC_iters <- n_post_samples + burn_in
+# # n_post_samples <- 10000
+# burn_in <- burn_in
+# MCMC_iters <- (n_post_samples + burn_in) * n_chains
 
-# prior_mean <- rep(0, 3)
-# prior_var <- diag(c(1, 1, 0.01))
+# # prior_mean <- rep(0, 3)
+# # prior_var <- diag(c(1, 1, 0.01))
 
-# prior_samples <- rmvnorm(10000, prior_mean, prior_var)
-# prior_samples_phi <- tanh(prior_samples[, 1])                                       
-# hist(prior_samples_sigma_xi)
+# # prior_samples <- rmvnorm(10000, prior_mean, prior_var)
+# # prior_samples_phi <- tanh(prior_samples[, 1])                                       
+# # hist(prior_samples_sigma_xi)
 
-if (rerun_mcmcw) {
-  mcmcw_results <- run_mcmc_sv(y, #sigma_eta, sigma_eps, 
-                               iters = MCMC_iters, burn_in = burn_in,
-                               prior_mean = prior_mean, prior_var = prior_var,  
-                               state_ini_mean = state_ini_mean, state_ini_var = state_ini_var,
-                               adapt_proposal = T, use_whittle_likelihood = T,
-                               transform = transform)
+# if (rerun_mcmcw) {
+#   mcmcw_results <- run_mcmc_sv(y, #sigma_eta, sigma_eps, 
+#                                iters = MCMC_iters, burn_in = burn_in,
+#                                prior_mean = prior_mean, prior_var = prior_var,  
+#                                state_ini_mean = state_ini_mean, state_ini_var = state_ini_var,
+#                                adapt_proposal = T, use_whittle_likelihood = T,
+#                                transform = transform)
   
-  if (save_mcmcw_results) {
-    saveRDS(mcmcw_results, mcmcw_filepath)
-  }
-} else {
-  mcmcw_results <- readRDS(mcmcw_filepath)
-}
+#   if (save_mcmcw_results) {
+#     saveRDS(mcmcw_results, mcmcw_filepath)
+#   }
+# } else {
+#   mcmcw_results <- readRDS(mcmcw_filepath)
+# }
 
-mcmcw.post_samples_phi <- as.mcmc(mcmcw_results$post_samples$phi[-(1:burn_in)])
-mcmcw.post_samples_eta <- as.mcmc(mcmcw_results$post_samples$sigma_eta[-(1:burn_in)])
-# mcmcw.post_samples_xi <- as.mcmc(mcmcw_results$post_samples$sigma_xi[-(1:burn_in)])
+# mcmcw.post_samples_phi <- as.mcmc(mcmcw_results$post_samples$phi[-(1:burn_in)])
+# mcmcw.post_samples_eta <- as.mcmc(mcmcw_results$post_samples$sigma_eta[-(1:burn_in)])
+# # mcmcw.post_samples_xi <- as.mcmc(mcmcw_results$post_samples$sigma_xi[-(1:burn_in)])
 
-# par(mfrow = c(2,1))
-# coda::traceplot(mcmcw.post_samples_phi, main = "Trace plot for phi")
-# coda::traceplot(mcmcw.post_samples_eta, main = "Trace plot for sigma_eta")
-# # traceplot(mcmcw.post_samples_xi, main = "Trace plot for sigma_xi")
-# 
-# par(mfrow = c(1,2))
-# plot(density(mcmcw.post_samples_phi), main = "Posterior of phi", 
-#      col = "blue", lty = 2, lwd = 2)
-# lines(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 2)
-# abline(v = phi, lty = 3)
-# legend("topleft", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
-#        col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
-# 
-# plot(density(mcmcw.post_samples_eta), main = "Posterior of sigma_eta", 
-#      col = "blue", lty = 2, lwd = 2)
-# lines(density(rvgaw.post_samples_sigma_eta), col = "red", lty = 2, lwd = 2)
-# abline(v = sigma_eta, lty = 3)
-# legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
-#        col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
+# # par(mfrow = c(2,1))
+# # coda::traceplot(mcmcw.post_samples_phi, main = "Trace plot for phi")
+# # coda::traceplot(mcmcw.post_samples_eta, main = "Trace plot for sigma_eta")
+# # # traceplot(mcmcw.post_samples_xi, main = "Trace plot for sigma_xi")
+# # 
+# # par(mfrow = c(1,2))
+# # plot(density(mcmcw.post_samples_phi), main = "Posterior of phi", 
+# #      col = "blue", lty = 2, lwd = 2)
+# # lines(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 2)
+# # abline(v = phi, lty = 3)
+# # legend("topleft", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
+# #        col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
+# # 
+# # plot(density(mcmcw.post_samples_eta), main = "Posterior of sigma_eta", 
+# #      col = "blue", lty = 2, lwd = 2)
+# # lines(density(rvgaw.post_samples_sigma_eta), col = "red", lty = 2, lwd = 2)
+# # abline(v = sigma_eta, lty = 3)
+# # legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
+# #        col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
 
 # ####### MCMCE ##########
 # mcmce_filepath <- paste0(result_directory, "mcmc_exact_results_n", n, 
@@ -376,15 +390,15 @@ mcmcw.post_samples_eta <- as.mcmc(mcmcw_results$post_samples$sigma_eta[-(1:burn_
 # # traceplot(mcmce.post_samples_xi, main = "Trace plot for sigma_xi")
 
 ### STAN ###
-hmc_filepath <- paste0(result_directory, "hmc_results_n", n, prior_info,
-                        "_", date, ".rds")
+hmc_filepath <- paste0(result_directory, "hmc_results_sv_real_", currency,
+                       prior_info, "_", date, ".rds")
 
-n_chains <- 2
+# n_chains <- 2
 
 if (rerun_hmc) {
   hmc_results <- run_hmc_sv(data = y, transform = transform,
-                             iters = n_post_samples / n_chains, 
-                             burn_in = burn_in / n_chains,
+                             iters = n_post_samples, 
+                             burn_in = burn_in,
                              n_chains = n_chains,
                              prior_mean = prior_mean, prior_var = prior_var)
   
@@ -402,7 +416,7 @@ hmc.post_samples_sigma_eta <- c(hmc_results$draws[,,2])#sqrt(exp(hmc.theta_sigma
 ########################################################
 ##          Stan with the Whittle likelihood          ##
 ########################################################
-hmcw_filepath <- paste0(result_directory, "hmcw_results_n", n, prior_type,
+hmcw_filepath <- paste0(result_directory, "hmcw_results_sv_real_", currency, prior_type,
                         "_", date, ".rds")
 
 if (rerun_hmcw) {
@@ -450,8 +464,8 @@ if (rerun_hmcw) {
     chains = n_chains,
     threads = parallel::detectCores(),
     refresh = 100,
-    iter_warmup = burn_in / n_chains,
-    iter_sampling = n_post_samples / n_chains
+    iter_warmup = burn_in,
+    iter_sampling = n_post_samples
   )
 
   hmcw_results <- list(draws = fit_stan_multi_sv_whittle$draws(variables = c("phi", "sigma_eta")),
@@ -640,7 +654,7 @@ grid.newpage()
 grid.draw(gp)
 
 if (save_plots) {
-  plot_file <- paste0("sv_real_posterior", "_", n, temper_info, reorder_info,
+  plot_file <- paste0("sv_real_posterior", "_", n, temper_info, reorder_info, block_info,
                       "_", transform, "_", date, ".png")
   filepath = paste0("./plots/", plot_file)
   png(filepath, width = 800, height = 600)

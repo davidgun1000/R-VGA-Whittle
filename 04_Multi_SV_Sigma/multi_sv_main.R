@@ -23,12 +23,12 @@ save_plots <- F
 rerun_rvgaw <- F
 rerun_mcmcw <- F
 rerun_hmc <- F
-rerun_hmcw <- T
+rerun_hmcw <- F
 
 save_rvgaw_results <- F
 save_mcmcw_results <- F
 save_hmc_results <- F
-save_hmcw_results <- T
+save_hmcw_results <- F
 
 ## R-VGAW flags
 use_tempering <- T #T
@@ -37,7 +37,8 @@ reorder <- 0 #"decreasing"
 reorder_seed <- 2024
 # decreasing <- T
 use_median <- F
-nblocks <- 100
+# nblocks <- 100
+blocksize <- 500
 n_indiv <- 100
 
 ## HMC flags
@@ -145,13 +146,13 @@ if (regenerate_data) {
   }
 } else {
   multi_sv_data <- readRDS(file = paste0("./data/multi_sv_data_", d, "d_Tfin", Tfin, "_", date, "_", dataset, ".rds"))
-  
-  X <- multi_sv_data$X
-  Y <- multi_sv_data$Y
-  Phi <- multi_sv_data$Phi
-  Sigma_eta <- multi_sv_data$Sigma_eta
-  Sigma_eps <- multi_sv_data$Sigma_eps
 }
+
+X <- multi_sv_data$X
+Y <- multi_sv_data$Y
+Phi <- multi_sv_data$Phi
+Sigma_eta <- multi_sv_data$Sigma_eta
+Sigma_eps <- multi_sv_data$Sigma_eps
 
 par(mfrow = c(ceiling(d/2),2))
 # plot(X[1, ], type = "l")
@@ -397,7 +398,7 @@ if (plot_likelihood_surface) {
 ################################
 
 if (use_tempering) {
-  n_temper <- 10
+  n_temper <- 5
   K <- 100
   temper_schedule <- rep(1/K, K)
   temper_info <- paste0("_temper", n_temper)
@@ -415,14 +416,16 @@ if (reorder == "random") {
   reorder_info <- ""
 }
 
-if (!is.null(nblocks)) {
-  block_info <- paste0("_", nblocks, "blocks", n_indiv, "indiv")
+# if (!is.null(nblocks)) {
+if (!is.null(blocksize)) {
+  # block_info <- paste0("_", nblocks, "blocks", n_indiv, "indiv")
+  block_info <- paste0("_", "blocksize", blocksize, "_", n_indiv, "indiv")
 } else {
   block_info <- ""
 }
 
 S <- 1000L
-a_vals <- 1
+# a_vals <- 1
 
 ################ R-VGA starts here #################
 print("Starting R-VGAL with Whittle likelihood...")
@@ -442,7 +445,10 @@ if (rerun_rvgaw) {
                                       reorder = reorder, 
                                       reorder_seed = reorder_seed,
                                       # decreasing = decreasing,
-                                      use_median = use_median)
+                                      # nblocks = nblocks,
+                                      blocksize = blocksize,
+                                      n_indiv = n_indiv)
+                                      # use_median = use_median)
   if (save_rvgaw_results) {
     saveRDS(rvgaw_results, rvgaw_filepath)
   }
@@ -949,6 +955,7 @@ if (plot_trajectories) {
 ## ggplot version
 param_names <- c("phi11", "phi22", "sigma_eta11", "sigma_eta21", "sigma_eta22")
 param_dim <- length(param_names)
+param_values <- c(diag(Phi), Sigma_eta[lower.tri(Sigma_eta, diag = T)])
 
 ind_df <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d)) # (i,j) indices of elements in a dxd matrix
 
@@ -956,9 +963,9 @@ indmat <- matrix(1:d^2, d, d, byrow = T) # number matrix elements by row
 phi_indices <- diag(indmat) # indices of diagonal elements of Phi
 sigma_indices <- indmat[lower.tri(indmat, diag = T)] # lower triangular elements of Sigma_eta
 
-rvgaw.post_samples <- matrix(NA, 10000, param_dim)
-hmc.post_samples <- matrix(NA, 10000, param_dim)
-hmcw.post_samples <- matrix(NA, 10000, param_dim)
+rvgaw.post_samples <- matrix(NA, n_post_samples*n_chains, param_dim)
+hmc.post_samples <- matrix(NA, n_post_samples*n_chains, param_dim)
+hmcw.post_samples <- matrix(NA, n_post_samples*n_chains, param_dim)
 
 # Arrange posterior samples of Phi in a matrix
 for (k in 1:length(phi_indices)) {
@@ -966,8 +973,8 @@ for (k in 1:length(phi_indices)) {
   i <- as.numeric(ind_df[r, ][1])
   j <- as.numeric(ind_df[r, ][2])
   rvgaw.post_samples[, k] <- sapply(rvgaw.post_samples_Phi, function(x) x[i,j])
-  hmc.post_samples[, k] <- hmc.post_samples_Phi[,,r]
-  hmcw.post_samples[, k] <- hmcw.post_samples_Phi[,,r]
+  hmc.post_samples[, k] <- c(hmc.post_samples_Phi[,,r])
+  hmcw.post_samples[, k] <- c(hmcw.post_samples_Phi[,,r])
 }
 
 # Arrange posterior samples of Sigma_eta in a matrix
@@ -976,8 +983,8 @@ for (k in 1:length(sigma_indices)) {
   i <- as.numeric(ind_df[r, ][1])
   j <- as.numeric(ind_df[r, ][2])
   rvgaw.post_samples[, k+d] <- sapply(rvgaw.post_samples_Sigma_eta, function(x) x[i,j])
-  hmc.post_samples[, k+d] <- hmc.post_samples_Sigma_eta[,,r]
-  hmcw.post_samples[, k+d] <- hmcw.post_samples_Sigma_eta[,,r]
+  hmc.post_samples[, k+d] <- c(hmc.post_samples_Sigma_eta[,,r])
+  hmcw.post_samples[, k+d] <- c(hmcw.post_samples_Sigma_eta[,,r])
 }
 rvgaw.df <- as.data.frame(rvgaw.post_samples)
 hmc.df <- as.data.frame(hmc.post_samples)
@@ -991,11 +998,16 @@ plots <- list()
 
 for (p in 1:param_dim) {
   
+  true_vals.df <- data.frame(name = param_names[p], val = param_values[p])
+
+
   plot <- ggplot(rvgaw.df, aes(x=.data[[param_names[p]]])) +
     # plot <- ggplot(exact_rvgal.df, aes(x=colnames(exact_rvgal.df)[p])) + 
     geom_density(col = "red", lwd = 1) +
     geom_density(data = hmcw.df, col = "goldenrod", lwd = 1) +
     geom_density(data = hmc.df, col = "deepskyblue", lwd = 1) +
+    geom_vline(data = true_vals.df, aes(xintercept=val),
+               color="black", linetype="dashed", linewidth=1) +
     labs(x = vars) +
     theme_bw() +
     theme(axis.title = element_blank(), text = element_text(size = 24)) +
@@ -1023,10 +1035,14 @@ for (ind in 1:n_lower_tri) {
   p <- mat_ind[1]
   q <- mat_ind[2]
   
+  param_df <- data.frame(x = param_values[q], y = param_values[p])
+
   cov_plot <- ggplot(rvgaw.df, aes(x = .data[[param_names[q]]], y = .data[[param_names[p]]])) +
     stat_ellipse(col = "red", type = "norm", lwd = 1) +
     stat_ellipse(data = hmcw.df, col = "goldenrod", type = "norm", lwd = 1) +
     stat_ellipse(data = hmc.df, col = "deepskyblue", type = "norm", lwd = 1) +
+    geom_point(data = param_df, aes(x = x, y = y),
+               shape = 4, color = "black", size = 4) +
     theme_bw() +
     theme(axis.title = element_blank(), text = element_text(size = 24)) +                               # Assign pretty axis ticks
     scale_x_continuous(breaks = scales::pretty_breaks(n = 3)) 
@@ -1074,7 +1090,7 @@ grid.newpage()
 grid.draw(gp)
 
 if (save_plots) {
-  plot_file <- paste0("multi_sv_sim_posterior", "_", Tfin, temper_info, reorder_info,
+  plot_file <- paste0("multi_sv_sim_posterior", "_", Tfin, temper_info, reorder_info, block_info,
                       "_", transform, "_", date, ".png")
   filepath = paste0("./plots/", plot_file)
   png(filepath, width = 1200, height = 900)

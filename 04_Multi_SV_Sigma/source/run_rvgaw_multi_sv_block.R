@@ -2,10 +2,11 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
                                use_tempering = T, temper_first = T,
                                temper_schedule, 
                                reorder,
-                               reorder_seed = 2023, use_cholesky = F,
+                               reorder_seed = 2023, use_cholesky = T,
                                transform = "arctanh",
                                n_post_samples = 10000,
-                               use_median = F, use_welch = F) {
+                               use_median = F, use_welch = F,
+                               nblocks = NULL, blocksize = NULL, n_indiv = NULL) {
   rvgaw.t1 <- proc.time()
   
   Y <- data
@@ -66,7 +67,9 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   
   all_blocks <- as.list(1:length(freq))
   
-  if (!is.null(nblocks)) {
+  # if (!is.null(nblocks)) {
+  if (!is.null(blocksize)) {
+      
     # Split frequencies into blocks
     # Last block may not have the same size as the rest
     # if the number of frequencies to be divided into blocks
@@ -74,14 +77,20 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
     indiv <- list()
     vec <- c()
     if (reorder == 0) { # leave the first n_indiv frequencies alone, cut the rest into blocks
-      indiv <- as.list(1:n_indiv)
       vec <- (n_indiv+1):length(freq)
-      blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
-      all_blocks <- c(indiv, blocks) 
+      # blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+      blocks <- split(vec, ceiling(seq_along(vec)/blocksize))
+      if (n_indiv == 0) {
+        all_blocks <- blocks
+      } else {
+        indiv <- as.list(1:n_indiv)
+        all_blocks <- c(indiv, blocks)    
+      }
     } else if (reorder == "decreasing") { # leave the last n_indiv frequencies alone, cut the rest into blocks
       indiv <- as.list((length(freq) - n_indiv):length(freq))
       vec <- 1:(length(freq) - n_indiv)
-      blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+      # blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+      blocks <- split(vec, ceiling(seq_along(vec)/blocksize))
       all_blocks <- c(blocks, indiv)
     }
   }

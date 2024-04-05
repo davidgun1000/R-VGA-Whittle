@@ -2,6 +2,7 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
                            transform = "arctanh",
                            prior_mean = 0, prior_var = 1,
                            deriv = "tf", S = 1000L,
+                           n_post_samples = 10000,
                            use_tempering = T, temper_schedule = rep(1 / 10, 10),
                            n_temper = 100,
                            temper_first = T,
@@ -9,7 +10,8 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
                            n_reorder = NULL,
                            decreasing = F,
                            n_indiv = NULL,
-                           nblocks = NULL) {
+                           nblocks = NULL, 
+                           blocksize = NULL) {
     print("Starting R-VGA with Whittle likelihood...")
 
     rvgaw.t1 <- proc.time()
@@ -76,7 +78,9 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
 
     all_blocks <- as.list(1:length(freq))
 
-    if (!is.null(nblocks)) {
+    # if (!is.null(nblocks)) {
+    if (!is.null(blocksize)) {
+        
         # Split frequencies into blocks
         # Last block may not have the same size as the rest
         # if the number of frequencies to be divided into blocks
@@ -85,21 +89,34 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
         vec <- c()
         if (reorder == 0) { # leave the first n_indiv frequencies alone, cut the rest into blocks
             
-            if (n_indiv == 0) {
-                vec <- (n_indiv+1):length(freq)
-                blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
-                all_blocks <- blocks
-            } else {
-                indiv <- as.list(1:n_indiv)
-                vec <- (n_indiv+1):length(freq)
-                blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
-                all_blocks <- c(indiv, blocks)    
-            }
+            # if (n_indiv == 0) {
+            #     vec <- (n_indiv+1):length(freq)
+            #     # blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+            #     blocks <- split(vec, ceiling(seq_along(vec)/blocksize))
+            #     all_blocks <- blocks
+            # } else {
+            #     indiv <- as.list(1:n_indiv)
+            #     vec <- (n_indiv+1):length(freq)
+            #     # blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+            #     blocks <- split(vec, ceiling(seq_along(vec)/blocksize))
+            #     all_blocks <- c(indiv, blocks)    
+            # }
+          
+          vec <- (n_indiv+1):length(freq)
+          # blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+          blocks <- split(vec, ceiling(seq_along(vec)/blocksize))
+          if (n_indiv == 0) {
+            all_blocks <- blocks
+          } else {
+            indiv <- as.list(1:n_indiv)
+            all_blocks <- c(indiv, blocks)    
+          }
              
         } else if (reorder == "decreasing") { # leave the last n_indiv frequencies alone, cut the rest into blocks
             indiv <- as.list((length(freq) - n_indiv):length(freq))
             vec <- 1:(length(freq) - n_indiv)
-            blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+            # blocks <- split(vec, cut(seq_along(vec), nblocks, labels = FALSE))
+            blocks <- split(vec, ceiling(seq_along(vec)/blocksize))
             all_blocks <- c(blocks, indiv)
         }
     }

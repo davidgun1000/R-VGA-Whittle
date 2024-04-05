@@ -71,7 +71,7 @@ construct_prior <- function(data, prior_type = "prior1",
     # }
     
   # } else {
-    diag_var_A <- rep(1, m)
+    diag_var_A <- rep(0.5, m)
   # }
   
   diag_var_Sigma <- 0

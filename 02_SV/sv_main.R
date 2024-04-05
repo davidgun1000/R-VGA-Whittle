@@ -63,14 +63,16 @@ prior_type <- ""
 transform <- "arctanh"
 plot_trajectories <- F
 
-n_post_samples <- 20000 # across all chains 
-burn_in <- 10000 # across all chains
+n_post_samples <- 10000 # per chain 
+burn_in <- 5000 # per chain
+n_chains <- 2
 
-nblocks <- 100
-n_indiv <- 0 #100
+# nblocks <- 100
+blocksize <- 500
+n_indiv <- 100
 
 ## Flags
-rerun_rvgaw <- T
+rerun_rvgaw <- F
 rerun_mcmcw <- F
 rerun_hmc <- F
 rerun_hmcw <- F
@@ -188,9 +190,11 @@ if (prior_type == "prior1") {
   prior_mean <- c(0, -4) #rep(0,2)
   prior_var <- diag(c(0.5, 0.5)) #diag(1, 2)
 } else {
-  prior_mean <- c(2, -3) #rep(0,2)
+  # prior_mean <- c(2, -3) #rep(0,2)
+
+  prior_mean <- c(1, -3) #rep(0,2)
   # prior_mean <- c(0, -3) #rep(0,2)
-  prior_var <- diag(c(0.5, 0.5)) #diag(1, 2)
+  prior_var <- diag(c(1, 0.5)) #diag(1, 2)
 }
 
 if (plot_prior) {
@@ -240,8 +244,10 @@ if (reorder == "random") {
   reorder_info <- ""
 }
 
-if (!is.null(nblocks)) {
-  block_info <- paste0("_", nblocks, "blocks", n_indiv, "indiv")
+# if (!is.null(nblocks)) {
+if (!is.null(blocksize)) {
+  # block_info <- paste0("_", nblocks, "blocks", n_indiv, "indiv")
+  block_info <- paste0("_", "blocksize", blocksize, "_", n_indiv, "indiv")
 } else {
   block_info <- ""
 }
@@ -254,14 +260,15 @@ if (rerun_rvgaw) {
   rvgaw_results <- run_rvgaw_sv(y = y, #sigma_eta = sigma_eta, sigma_eps = sigma_eps, 
                                 prior_mean = prior_mean, prior_var = prior_var, 
                                 deriv = "tf", 
-                                n_post_samples = n_post_samples,
+                                n_post_samples = n_post_samples * n_chains,
                                 S = S, use_tempering = use_tempering, 
                                 temper_first = temper_first,
                                 reorder = reorder,
                                 n_temper = n_temper,
                                 temper_schedule = temper_schedule, 
                                 transform = transform,
-                                nblocks = nblocks,
+                                # nblocks = nblocks,
+                                blocksize = blocksize,
                                 n_indiv = n_indiv)
   
   if (save_rvgaw_results) {
@@ -287,7 +294,7 @@ adapt_proposal <- T
 
 # n_post_samples <- 10000
 # burn_in <- 1000
-MCMC_iters <- n_post_samples + burn_in
+MCMC_iters <- (n_post_samples + burn_in) * n_chains
 
 # prior_mean <- rep(0, 3)
 # prior_var <- diag(c(1, 1, 0.01))
@@ -342,7 +349,7 @@ mcmcw.post_samples_eta <- as.mcmc(mcmcw_results$post_samples$sigma_eta[-(1:burn_
 hmc_filepath <- paste0(result_directory, "hmc_results_n", n, 
                          "_phi", phi_string, "_", date, ".rds")
 
-n_chains <- 2
+# n_chains <- 2
 # hmc_iters <- n_post_samples / n_chains
 # burn_in_per_chain <- burn_in / n_chains # per chain
 
@@ -350,8 +357,8 @@ n_chains <- 2
 if (rerun_hmc) {
   hmc_results <- run_hmc_sv(data = y, transform = transform,
                              prior_mean = prior_mean, prior_var = prior_var,
-                             iters = n_post_samples / n_chains, 
-                             burn_in = burn_in / n_chains,
+                             iters = n_post_samples, 
+                             burn_in = burn_in,
                             n_chains = n_chains)
   
   if (save_hmc_results) {
@@ -424,8 +431,8 @@ if (rerun_hmcw) {
     chains = n_chains,
     threads = parallel::detectCores(),
     refresh = 100,
-    iter_warmup = burn_in / n_chains,
-    iter_sampling = n_post_samples / n_chains
+    iter_warmup = burn_in,
+    iter_sampling = n_post_samples
   )
 
   hmcw_results <- list(draws = fit_stan_multi_sv_whittle$draws(variables = c("phi", "sigma_eta")),
@@ -532,7 +539,7 @@ for (ind in 1:n_lower_tri) {
     stat_ellipse(data = hmcw.df, col = "goldenrod", type = "norm", lwd = 1) +
     stat_ellipse(data = hmc.df, col = "deepskyblue", type = "norm", lwd = 1) +
     geom_point(data = param_df, aes(x = x, y = y),
-               shape = 4, color = "black", size = 4) +
+               shape = 4, color = "black", size = 5) +
     theme_bw() +
     theme(axis.title = element_blank(), text = element_text(size = 24)) +                               # Assign pretty axis ticks
     scale_x_continuous(breaks = scales::pretty_breaks(n = 3)) 
@@ -578,7 +585,7 @@ grid.newpage()
 grid.draw(gp)
 
 if (save_plots) {
-  plot_file <- paste0("sv_sim_posterior", "_", n, temper_info, reorder_info,
+  plot_file <- paste0("sv_sim_posterior", "_", n, temper_info, reorder_info, block_info,
                       "_", transform, "_", date, ".png")
   filepath = paste0("./plots/", plot_file)
   png(filepath, width = 800, height = 600)

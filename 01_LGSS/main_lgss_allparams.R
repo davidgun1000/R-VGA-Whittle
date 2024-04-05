@@ -57,7 +57,7 @@ date <- "20230525"
 regenerate_data <- F
 save_data <- F
 
-rerun_rvgaw <- T
+rerun_rvgaw <- F
 rerun_mcmcw <- F
 rerun_hmc <- F
 rerun_hmcw <- F
@@ -198,8 +198,9 @@ for (i in 1:length(phi_grid)) {
 
 S <- 1000L
 
-nblocks <- 100
-n_indiv <- 100
+# nblocks <- 100
+n_indiv <- 1000
+blocksize <- 500 #floor((n-1)/2) - n_indiv 
 
 if (use_tempering) {
   n_temper <- 5
@@ -226,8 +227,12 @@ if (reorder == "random") {
   reorder_info <- ""
 }
 
-if (!is.null(nblocks)) {
-  block_info <- paste0("_", nblocks, "blocks", n_indiv, "indiv")
+# if (!is.null(nblocks)) {
+if (!is.null(blocksize)) {
+
+  # block_info <- paste0("_", nblocks, "blocks", n_indiv, "indiv")
+  block_info <- paste0("_", "blocksize", blocksize, "_", n_indiv, "indiv")
+  
 } else {
   block_info <- ""
 }
@@ -239,13 +244,15 @@ if (rerun_rvgaw) {
   rvgaw_results <- run_rvgaw_lgss(y = y, #sigma_eta = sigma_eta, sigma_eps = sigma_eps, 
                                   prior_mean = prior_mean, prior_var = prior_var, 
                                   deriv = "tf", 
-                                  S = S, use_tempering = use_tempering, 
+                                  S = S, n_post_samples = n_post_samples,
+                                  use_tempering = use_tempering, 
                                   temper_first = temper_first,
                                   temper_schedule = temper_schedule,
                                   reorder = reorder,
                                   reorder_seed = reorder_seed,
                                   n_temper = n_temper,
-                                  nblocks = nblocks,
+                                  # nblocks = nblocks,
+                                  blocksize = blocksize,
                                   n_indiv = n_indiv
                                   )
   
@@ -492,7 +499,7 @@ grid.newpage()
 grid.draw(gp)
 
 if (save_plots) {
-  plot_file <- paste0("lgss_posterior", "_", n, temper_info, reorder_info,
+  plot_file <- paste0("lgss_posterior", "_", n, temper_info, reorder_info, block_info,
                       "_", transform, "_", date, ".png")
   filepath = paste0("./plots/", plot_file)
   png(filepath, width = 800, height = 600)
