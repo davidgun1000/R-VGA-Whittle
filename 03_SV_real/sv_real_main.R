@@ -51,7 +51,7 @@ if (length(gpus) > 0) {
 # date <- "20230223"
 date <- "20230918"
 dataset <- "exrates"
-currency <- "NZD"
+currency <- "JPY"
 
 ## R-VGA flags
 use_tempering <- T
@@ -67,17 +67,17 @@ plot_trajectories <- T
 use_welch <- F
 
 ## Flags
-rerun_rvgaw <- T
+rerun_rvgaw <- F
 rerun_mcmcw <- F
 # rerun_mcmce <- F
 rerun_hmc <- F
-rerun_hmcw <- T
+rerun_hmcw <- F
 
-save_rvgaw_results <- T
+save_rvgaw_results <- F
 save_mcmcw_results <- F
 save_hmc_results <- F
-save_hmcw_results <- T
-save_plots <- F
+save_hmcw_results <- F
+save_plots <- T
 
 n_post_samples <- 10000 # per chain 
 burn_in <- 5000 # per chain
@@ -239,10 +239,10 @@ if (prior_type == "prior1") {
   prior_info <- paste0("_", prior_type)
 } else {
   prior_mean <- c(2, -3) #rep(0,2) # c(2, -3)
-  # prior_mean <- c(0, -3) #rep(0,2)
+  # prior_mean <- c(2, -2) #rep(0,2)
   
-  # prior_var <- diag(c(0.5, 0.5)) #diag(1, 2)
-  prior_var <- diag(c(1, 1)) #diag(1, 2)
+  prior_var <- diag(c(0.5, 0.5)) #diag(1, 2)
+  # prior_var <- diag(c(1, 1)) #diag(1, 2)
   
 }
 
@@ -492,8 +492,8 @@ par(mfrow = c(1,2))
 plot(density(rvgaw.post_samples_phi), main = "Posterior of phi", 
      col = "red", lty = 2, lwd = 3) #, xlim = c(0.9, 0.999))
 # lines(density(mcmce.post_samples_phi), col = "blue", lwd = 3)
-lines(density(mcmcw.post_samples_phi), col = "goldenrod", lty = 2, lwd = 3)
-# lines(density(hmc.post_samples_phi), col = "deepskyblue", lty = 1, lwd = 3)
+# lines(density(mcmcw.post_samples_phi), col = "goldenrod", lty = 2, lwd = 3)
+lines(density(hmc.post_samples_phi), col = "deepskyblue", lty = 1, lwd = 3)
 lines(density(hmcw.post_samples_phi), col = "royalblue", lty = 2, lwd = 3)
 # legend("topleft", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
       #  col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
@@ -501,8 +501,8 @@ lines(density(hmcw.post_samples_phi), col = "royalblue", lty = 2, lwd = 3)
 plot(density(rvgaw.post_samples_sigma_eta), main = "Posterior of sigma_eta", 
      col = "red", lty = 2, lwd = 3) #, xlim = c(0.05, 0.5))
 # lines(density(mcmce.post_samples_eta), col = "blue", lwd = 3)
-lines(density(mcmcw.post_samples_eta), col = "goldenrod", lty = 2, lwd = 3)
-# lines(density(hmc.post_samples_sigma_eta), col = "deepskyblue", lty = 1, lwd = 3)
+# lines(density(mcmcw.post_samples_eta), col = "goldenrod", lty = 2, lwd = 3)
+lines(density(hmc.post_samples_sigma_eta), col = "deepskyblue", lty = 1, lwd = 3)
 lines(density(hmcw.post_samples_sigma_eta), col = "royalblue", lty = 2, lwd = 3)
 # legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
       #  col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
@@ -571,6 +571,8 @@ names(hmcw.df) <- param_names
 
 plots <- list()
 
+xlims <- list(phi_axis = c(0.95, 1.0001), sigma_axis = c(0.05, 0.3))
+
 for (p in 1:param_dim) {
   
   plot <- ggplot(rvgaw.df, aes(x=.data[[param_names[p]]])) +
@@ -581,7 +583,7 @@ for (p in 1:param_dim) {
     labs(x = vars) +
     theme_bw() +
     theme(axis.title = element_blank(), text = element_text(size = 24)) +
-    scale_x_continuous(breaks = scales::pretty_breaks(n = 4))
+    scale_x_continuous(limits = xlims[[p]], breaks = scales::pretty_breaks(n = 4))
   # theme(legend.position="bottom") + 
   # scale_color_manual(values = c('RVGA' = 'red', 'HMC' = 'blue'))
   
@@ -654,7 +656,7 @@ grid.newpage()
 grid.draw(gp)
 
 if (save_plots) {
-  plot_file <- paste0("sv_real_posterior", "_", n, temper_info, reorder_info, block_info,
+  plot_file <- paste0("sv_real_posterior_", currency, temper_info, reorder_info, block_info,
                       "_", transform, "_", date, ".png")
   filepath = paste0("./plots/", plot_file)
   png(filepath, width = 800, height = 600)

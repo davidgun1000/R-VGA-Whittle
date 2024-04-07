@@ -69,7 +69,7 @@ transform <- "arctanh"
 prior_type <- "prior1"
 
 # reread_data <- F
-rerun_rvgaw <- T
+rerun_rvgaw <- F
 rerun_mcmcw <- F
 rerun_hmc <- F
 rerun_hmcw <- F
