@@ -8,6 +8,7 @@ library("coda")
 library("mvtnorm")
 library("astsa")
 library("cmdstanr")
+library(dplyr)
 # library("expm")
 # library("stcos")
 # library(dplyr)
@@ -67,7 +68,7 @@ plot_trajectories <- F
 plot_trace <- F
 transform <- "arctanh"
 prior_type <- "prior1"
-
+currencies <- c("GBP", "USD")
 # reread_data <- F
 rerun_rvgaw <- F
 rerun_mcmcw <- F
@@ -79,7 +80,7 @@ save_mcmcw_results <- F
 save_hmc_results <- F
 save_hmcw_results <- F
 
-save_plots <- F
+save_plots <- T
 
 ## R-VGAW flags
 use_tempering <- T
@@ -111,17 +112,23 @@ result_directory <- paste0("./results/forex/", nstocks, "d/", transform, "/")
 ## Exchange rate data
 load("./data/exrates.RData")
 
-data <- dat[, c("AUD", "NZD", "USD")]
-nrows <- nrow(data)
+log_data <- mutate_all(dat, function(x) c(0, log(x[2:length(x)] / x[1:(length(x)-1)]) * 100))
 
-# Compute log returns
-data$AUD_returns <- c(0, log(data$AUD[2:nrows] / data$AUD[1:(nrows-1)])*100)
-data$NZD_returns <- c(0, log(data$NZD[2:nrows] / data$NZD[1:(nrows-1)])*100)
-data$USD_returns <- c(0, log(data$USD[2:nrows] / data$USD[1:(nrows-1)])*100)
-
-exrates <- data[-1, c("AUD_returns", "NZD_returns", "USD_returns")] # get rid of 1st row
+exrates <- log_data[-1, ] # get rid of 1st row
 # Y <- exrates[, 1:nstocks]
-Y <- exrates[, c("AUD_returns", "USD_returns")]
+Y <- exrates[, currencies]
+
+# data <- dat[, c("AUD", "NZD", "USD")]
+# nrows <- nrow(data)
+
+# # Compute log returns
+# data$AUD_returns <- c(0, log(data$AUD[2:nrows] / data$AUD[1:(nrows-1)])*100)
+# data$NZD_returns <- c(0, log(data$NZD[2:nrows] / data$NZD[1:(nrows-1)])*100)
+# data$USD_returns <- c(0, log(data$USD[2:nrows] / data$USD[1:(nrows-1)])*100)
+
+# exrates <- data[-1, c("AUD_returns", "NZD_returns", "USD_returns")] # get rid of 1st row
+# Y <- exrates[, 1:nstocks]
+# Y <- exrates[, c("AUD_returns", "USD_returns")]
 # eur_usd <- read.csv("./data/EURUSD.csv")
 # aud_usd <- read.csv("./data/AUDUSD.csv")
 # nzd_usd <- read.csv("./data/NZDUSD.csv")
@@ -405,7 +412,8 @@ a_vals <- 1
 ################ R-VGA starts here #################
 print("Starting R-VGAL with Whittle likelihood...")
 
-rvgaw_filepath <- paste0(result_directory, "rvga_whittle_forex",  
+rvgaw_filepath <- paste0(result_directory, "rvga_whittle_forex", 
+                         "_", paste(currencies, collapse = "_"), 
                          temper_info, reorder_info, block_info, "_", date, ".rds")
 
 if (rerun_rvgaw) {
@@ -526,6 +534,7 @@ mcmcw.post_samples_Sigma_eta <- lapply(mcmcw_results$post_samples, function(x) x
 print("Starting HMC...")
 
 hmc_filepath <- paste0(result_directory, "hmc_forex", 
+                      "_", paste(currencies, collapse = "_"), 
                        "_", date, ".rds")
 
 
@@ -578,6 +587,7 @@ hmc.post_samples_Sigma_eta <- hmc_results$draws[,,(d^2+1):(2*d^2)]
 ######################################
 
 hmcw_filepath <- paste0(result_directory, "hmcw_forex", 
+                        "_", paste(currencies, collapse = "_"),
                          "_", date, ".rds")
 
 if (rerun_hmcw) {
@@ -849,9 +859,12 @@ for (k in 1:length(sigma_indices)) {
   hmc.post_samples[, k+d] <- c(hmc.post_samples_Sigma_eta[,,r])
   hmcw.post_samples[, k+d] <- c(hmcw.post_samples_Sigma_eta[,,r])
 }
-rvgaw.df <- as.data.frame(rvgaw.post_samples)
-hmc.df <- as.data.frame(hmc.post_samples)
-hmcw.df <- as.data.frame(hmcw.post_samples)
+
+throwaway <- 15000
+
+rvgaw.df <- as.data.frame(rvgaw.post_samples[-(1:throwaway),])
+hmc.df <- as.data.frame(hmc.post_samples[-(1:throwaway),])
+hmcw.df <- as.data.frame(hmcw.post_samples[-(1:throwaway),])
 names(rvgaw.df) <- param_names
 names(hmc.df) <- param_names
 names(hmcw.df) <- param_names
@@ -945,7 +958,9 @@ grid.newpage()
 grid.draw(gp)
 
 if (save_plots) {
-  plot_file <- paste0("multi_sv_real_posterior", temper_info, reorder_info, block_info,
+  plot_file <- paste0("test_multi_sv_real_posterior_", 
+                      paste(currencies, collapse = "_"),
+                      temper_info, reorder_info, block_info,
                       "_", transform, "_", date, ".png")
   filepath = paste0("./plots/", plot_file)
   png(filepath, width = 1200, height = 900)
@@ -954,8 +969,8 @@ if (save_plots) {
 }
 
 ## Timings
-rvgaw.time <- rvgaw_results$time_elapsed[3]
-hmcw.time <- sum(hmcw_results$time()$chains$total)
-hmc.time <- sum(hmc_results$time()$chains$total)
-print(data.frame(method = c("R-VGA", "HMCW", "HMC"),
-                 time = c(rvgaw.time, hmcw.time, hmc.time)))
+# rvgaw.time <- rvgaw_results$time_elapsed[3]
+# hmcw.time <- sum(hmcw_results$time()$chains$total)
+# hmc.time <- sum(hmc_results$time()$chains$total)
+# print(data.frame(method = c("R-VGA", "HMCW", "HMC"),
+#                  time = c(rvgaw.time, hmcw.time, hmc.time)))

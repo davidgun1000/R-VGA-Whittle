@@ -51,7 +51,7 @@ if (length(gpus) > 0) {
 # date <- "20230223"
 date <- "20230918"
 dataset <- "exrates"
-currency <- "JPY"
+currency <- "AUD"
 
 ## R-VGA flags
 use_tempering <- T
@@ -67,24 +67,24 @@ plot_trajectories <- T
 use_welch <- F
 
 ## Flags
-rerun_rvgaw <- F
+rerun_rvgaw <- T
 rerun_mcmcw <- F
 # rerun_mcmce <- F
 rerun_hmc <- F
-rerun_hmcw <- F
+rerun_hmcw <- T
 
-save_rvgaw_results <- F
+save_rvgaw_results <- T
 save_mcmcw_results <- F
 save_hmc_results <- F
-save_hmcw_results <- F
-save_plots <- T
+save_hmcw_results <- T
+save_plots <- F
 
 n_post_samples <- 10000 # per chain 
 burn_in <- 5000 # per chain
 n_chains <- 2
 
 # nblocks <- 100
-blocksize <- 500
+blocksize <- 1000
 n_indiv <- 100
 
 ## Result directory
@@ -407,11 +407,11 @@ if (rerun_hmc) {
   }
   
 } else {
-  hmc_results <- readRDS(hmc_filepath)
+  # hmc_results <- readRDS(hmc_filepath)
 }
 
-hmc.post_samples_phi <- c(hmc_results$draws[,,1]) #tanh(hmc.theta_phi)
-hmc.post_samples_sigma_eta <- c(hmc_results$draws[,,2])#sqrt(exp(hmc.theta_sigma))
+# hmc.post_samples_phi <- c(hmc_results$draws[,,1]) #tanh(hmc.theta_phi)
+# hmc.post_samples_sigma_eta <- c(hmc_results$draws[,,2])#sqrt(exp(hmc.theta_sigma))
 
 ########################################################
 ##          Stan with the Whittle likelihood          ##
@@ -493,7 +493,7 @@ plot(density(rvgaw.post_samples_phi), main = "Posterior of phi",
      col = "red", lty = 2, lwd = 3) #, xlim = c(0.9, 0.999))
 # lines(density(mcmce.post_samples_phi), col = "blue", lwd = 3)
 # lines(density(mcmcw.post_samples_phi), col = "goldenrod", lty = 2, lwd = 3)
-lines(density(hmc.post_samples_phi), col = "deepskyblue", lty = 1, lwd = 3)
+# lines(density(hmc.post_samples_phi), col = "deepskyblue", lty = 1, lwd = 3)
 lines(density(hmcw.post_samples_phi), col = "royalblue", lty = 2, lwd = 3)
 # legend("topleft", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
       #  col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
@@ -502,7 +502,7 @@ plot(density(rvgaw.post_samples_sigma_eta), main = "Posterior of sigma_eta",
      col = "red", lty = 2, lwd = 3) #, xlim = c(0.05, 0.5))
 # lines(density(mcmce.post_samples_eta), col = "blue", lwd = 3)
 # lines(density(mcmcw.post_samples_eta), col = "goldenrod", lty = 2, lwd = 3)
-lines(density(hmc.post_samples_sigma_eta), col = "deepskyblue", lty = 1, lwd = 3)
+# lines(density(hmc.post_samples_sigma_eta), col = "deepskyblue", lty = 1, lwd = 3)
 lines(density(hmcw.post_samples_sigma_eta), col = "royalblue", lty = 2, lwd = 3)
 # legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
       #  col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
@@ -560,11 +560,11 @@ param_names <- c("phi", "sigma_eta")
 param_dim <- length(param_names)
 rvgaw.df <- data.frame(phi = rvgaw.post_samples_phi, 
                        sigma_eta = rvgaw.post_samples_sigma_eta)
-hmc.df <- data.frame(phi = hmc.post_samples_phi, 
-                     sigma_eta = hmc.post_samples_sigma_eta)
+# hmc.df <- data.frame(phi = hmc.post_samples_phi, 
+#                      sigma_eta = hmc.post_samples_sigma_eta)
 hmcw.df <- data.frame(phi = hmcw.post_samples_phi, 
                       sigma_eta = hmcw.post_samples_sigma_eta)
-names(hmc.df) <- param_names
+# names(hmc.df) <- param_names
 names(hmcw.df) <- param_names
 
 ## ggplot version
@@ -610,7 +610,7 @@ for (ind in 1:n_lower_tri) {
   cov_plot <- ggplot(rvgaw.df, aes(x = .data[[param_names[q]]], y = .data[[param_names[p]]])) +
     stat_ellipse(col = "red", type = "norm", lwd = 1) +
     stat_ellipse(data = hmcw.df, col = "goldenrod", type = "norm", lwd = 1) +
-    stat_ellipse(data = hmc.df, col = "deepskyblue", type = "norm", lwd = 1) +
+    # stat_ellipse(data = hmc.df, col = "deepskyblue", type = "norm", lwd = 1) +
     theme_bw() +
     theme(axis.title = element_blank(), text = element_text(size = 24)) +                               # Assign pretty axis ticks
     scale_x_continuous(breaks = scales::pretty_breaks(n = 3)) 
@@ -666,6 +666,6 @@ if (save_plots) {
 
 rvgaw.time <- rvgaw_results$time_elapsed[3]
 hmcw.time <- sum(hmcw_results$time()$chains$total)
-hmc.time <- sum(hmc_results$time()$chains$total)
+# hmc.time <- sum(hmc_results$time()$chains$total)
 print(data.frame(method = c("R-VGA", "HMCW", "HMC"),
                  time = c(rvgaw.time, hmcw.time, hmc.time)))
