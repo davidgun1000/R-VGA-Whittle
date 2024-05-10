@@ -80,7 +80,7 @@ save_mcmcw_results <- F
 save_hmc_results <- F
 save_hmcw_results <- F
 
-save_plots <- T
+save_plots <- F
 
 ## R-VGAW flags
 use_tempering <- T

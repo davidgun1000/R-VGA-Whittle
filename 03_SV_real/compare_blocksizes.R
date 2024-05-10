@@ -33,7 +33,7 @@ result_directory <- "./results/exrates/arctanh/blocksize_test/"
 ## Flags
 rerun_test <- F
 save_rvgaw_results <- F
-save_plots <- T
+save_plots <- F
 
 date <- "20240214"
 n <- 10000
@@ -212,12 +212,22 @@ pgram_output <- compute_periodogram(y)
 freq <- pgram_output$freq
 I <- pgram_output$periodogram
 
-periodogram_plot <- paste0("periodogram_sv_real_", date, ".png")
+df <- data.frame(freq = freq, periodogram = I)
+pg_plot <- df %>% ggplot(aes(x = freq, y = periodogram)) +
+  geom_line() +
+  geom_vline(xintercept = freq[100], linetype = "dashed", color = "red") +
+  labs(x = "Frequency", y = "Periodogram") +
+  theme_bw() +
+  theme(text = element_text(size = 24))
+print(pg_plot)
 
 if (save_plots) {
+  periodogram_plot <- paste0("periodogram_sv_real_", date, ".png")
   filepath = paste0("./plots/blocksize_test/", periodogram_plot)
   png(filepath, width = 800, height = 400)
-  plot(freq, I, type = "l", xlab = "Frequency", ylab = "Periodogram")
-  abline(v = freq[100], lwd = 2, lty = 2, col = "red")
+  print(pg_plot)
   dev.off()
 }
+
+
+

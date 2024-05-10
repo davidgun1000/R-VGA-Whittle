@@ -21,7 +21,8 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
   rvgaw.prec <- list()
   rvgaw.prec[[1]] <- chol2inv(chol(prior_var))
   
-  pgram_out <- compute_periodogram(y)
+  y_tilde <- log(y^2) - mean(y)
+  pgram_out <- compute_periodogram(y_tilde)
   freq <- pgram_out$freq
   I <- pgram_out$periodogram
   
@@ -63,9 +64,9 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
   
   if (use_tempering) {
     if (temper_first) {
-      cat("Damping the first ", n_temper, "frequencies... \n")
+      cat("Damping the first", n_temper, "frequencies... \n")
     } else {
-      cat("Damping the last ", n_temper, "frequencies... \n")
+      cat("Damping the last", n_temper, "frequencies... \n")
     }
   }
   
@@ -103,10 +104,6 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
   for (i in 1:n_updates) {
     # cat("i =", i, "\n")
     blockinds <- all_blocks[[i]]
-    
-    # if (i == 126) {
-    #   browser()
-    # }
     
     a_vals <- 1
     if (use_tempering) {

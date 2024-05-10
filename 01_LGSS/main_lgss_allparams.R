@@ -9,6 +9,7 @@ library(cmdstanr)
 reticulate::use_condaenv("myenv", required = TRUE)
 library(keras)
 library(Matrix)
+library(tidyr)
 library(ggplot2)
 library(grid)
 library(gtable)
@@ -22,6 +23,7 @@ source("./source/compute_kf_likelihood.R")
 source("./source/compute_whittle_likelihood_lgss.R")
 source("./source/update_sigma.R")
 source("./source/run_hmc_lgss.R")
+source("./source/find_cutoff_freq.R")
 
 ################## Some code to limit tensorflow memory usage ##################
 
@@ -57,18 +59,18 @@ date <- "20230525"
 regenerate_data <- F
 save_data <- F
 
-rerun_rvgaw <- F
+rerun_rvgaw <- T
 rerun_mcmcw <- F
 rerun_hmc <- F
 rerun_hmcw <- F
 
-save_rvgaw_results <- F
+save_rvgaw_results <- T
 save_mcmcw_results <- F
 save_hmc_results <- F
 save_hmcw_results <- F
 
 plot_likelihood_surface <- F
-plot_trajectories <- F
+plot_trajectories <- T
 save_plots <- F
 
 ## R-VGA flags
@@ -140,8 +142,8 @@ prior_mean <- c(0, -1, -1)#rep(0, 3)
 prior_var <- diag(c(1, 1, 1))
 
 ## Initial state mean and variance for the KF
-state_ini_mean <- 0
-state_ini_var <- 1
+# state_ini_mean <- 0
+# state_ini_var <- 1
 
 if (plot_likelihood_surface) {
 ## Test the likelihood computation by plotting likelihood surface over a grid of parameter values
@@ -199,8 +201,8 @@ for (i in 1:length(phi_grid)) {
 S <- 1000L
 
 # nblocks <- 100
-n_indiv <- 1000
-blocksize <- 500 #floor((n-1)/2) - n_indiv 
+n_indiv <- find_cutoff_freq(y, nsegs = 20, power_prop = 1/2)$cutoff_ind #500 #220 #1000 #807
+blocksize <- NULL #100 #floor((n-1)/2) - n_indiv 
 
 if (use_tempering) {
   n_temper <- 5
@@ -499,7 +501,7 @@ grid.newpage()
 grid.draw(gp)
 
 if (save_plots) {
-  plot_file <- paste0("lgss_posterior", "_", n, temper_info, reorder_info, block_info,
+  plot_file <- paste0("test_lgss_posterior", "_", n, temper_info, reorder_info, block_info,
                       "_", transform, "_", date, ".png")
   filepath = paste0("./plots/", plot_file)
   png(filepath, width = 800, height = 600)
@@ -521,18 +523,40 @@ if (plot_trajectories) {
   mu_sigma_eps <- sqrt(exp(mu_sigma_eps))
   plot_range <- 1:length(mu_phi) #400:1000#floor(n/2)
 
-  par(mfrow = c(1,3))
-  plot(mu_phi[plot_range], type = "l",
-       ylab = "phi", xlab = "Iterations", main = "Trajectory of phi")
-  abline(h = phi, lty = 2)
+  true_df <- data.frame(param = c("phi", "sigma[eta]", "sigma[epsilon]"), 
+                        value = c(phi, sigma_eta, sigma_eps))
+
+  trajectory_df <- data.frame(phi = mu_phi, sigma_eta = mu_sigma_eta, sigma_eps = mu_sigma_eps)
+  names(trajectory_df) <- c("phi", "sigma[eta]", "sigma[epsilon]")
+  trajectory_df$iter <- 1:nrow(trajectory_df)
+
+  trajectory_df_long <- trajectory_df %>% pivot_longer(cols = !iter, 
+                                                      names_to = "param", values_to = "value")
+  trajectory_plot <- trajectory_df_long %>% ggplot() + 
+    geom_line(aes(x = iter, y = value)) +
+    facet_wrap(~param, scales = "free", labeller = label_parsed) +
+    geom_hline(data = true_df, aes(yintercept = value), linetype = "dashed") +
+    theme_bw() + theme(text = element_text(size = 28)) + 
+    xlab("Iterations") + ylab("Value")
+  print(trajectory_plot)                                                      
+
+  png(paste0("./plots/trajectory_lgss", block_info, ".png"), width = 1500, height = 500)
+  print(trajectory_plot)                                                      
+  dev.off()
+  # png("./plots/trajectory_lgss.png", width = 1500, height = 500)
+  # par(mfrow = c(1,3))
+  # plot(mu_phi[plot_range], type = "l",
+  #      ylab = "phi", xlab = "Iterations", main = "Trajectory of phi")
+  # abline(h = phi, lty = 2)
   
-  plot(mu_sigma_eta[plot_range], type = "l",
-       ylab = "sigma_eta", xlab = "Iterations", main = "Trajectory of sigma_eta")
-  abline(h = sigma_eta, lty = 2)
+  # plot(mu_sigma_eta[plot_range], type = "l",
+  #      ylab = "sigma_eta", xlab = "Iterations", main = "Trajectory of sigma_eta")
+  # abline(h = sigma_eta, lty = 2)
   
-  plot(mu_sigma_eps[plot_range], type = "l",
-       ylab = "sigma_eps", xlab = "Iterations", main = "Trajectory of sigma_eps")
-  abline(h = sigma_eps, lty = 2)
+  # plot(mu_sigma_eps[plot_range], type = "l",
+  #      ylab = "sigma_eps", xlab = "Iterations", main = "Trajectory of sigma_eps")
+  # abline(h = sigma_eps, lty = 2)
+  # dev.off()
 }
 
 ## Timing comparison

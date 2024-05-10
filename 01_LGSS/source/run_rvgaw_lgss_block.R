@@ -190,7 +190,7 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
                 neg_eigval <- eigvals[eigvals < 0]
                 cat("Warning: precision matrix has negative eigenvalue", neg_eigval, "\n")
                 prec_temp <- as.matrix(nearPD(prec_temp)$mat)
-                browser()
+                # browser()
             }
 
             mu_temp <- mu_temp + chol2inv(chol(prec_temp)) %*% (a * E_grad)

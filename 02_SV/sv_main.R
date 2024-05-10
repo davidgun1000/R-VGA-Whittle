@@ -24,6 +24,7 @@ source("./source/run_rvgaw_sv_block.R")
 source("./source/run_mcmc_sv.R")
 source("./source/run_hmc_sv.R")
 source("./source/compute_periodogram.R")
+source("./source/find_cutoff_freq.R")
 # source("./source/run_corr_pmmh_sv.R")
 # source("./source/particleFilter.R")
 
@@ -57,22 +58,18 @@ use_tempering <- T
 temper_first <- T
 reorder <- 0 #"decreasing" # or decreasing # or a number
 reorder_seed <- 2024
-plot_prior <- T
+plot_prior <- F
 plot_likelihood_surface <- F
 prior_type <- ""
 transform <- "arctanh"
-plot_trajectories <- F
+plot_trajectories <- T
 
 n_post_samples <- 10000 # per chain 
 burn_in <- 5000 # per chain
 n_chains <- 2
 
-# nblocks <- 100
-blocksize <- 500
-n_indiv <- 100
-
 ## Flags
-rerun_rvgaw <- F
+rerun_rvgaw <- T
 rerun_mcmcw <- F
 rerun_hmc <- F
 rerun_hmcw <- F
@@ -182,6 +179,31 @@ if (plot_likelihood_surface) {
 # 
 # browser()
 
+# ## Periodogram smoothing
+# pdg <- compute_periodogram(y)
+# freq <- pdg$freq
+# pdg_original <- pdg$periodogram
+
+# y_tilde <- log(y^2) - mean(y)
+# pdg_welch <- compute_welch_psd(y_tilde, nperseg = 500, p_overlap = 0.5)
+# freq_welch <- pdg_welch$freq
+# pdg_smoothed <- pdg_welch$pdg
+
+# plot(freq, pdg_original, type = "l")
+# lines(freq_welch, pdg_smoothed, col = "red")
+
+# dB <- 10 * log10(pdg_smoothed)
+# half_power <- 10*log10(max(pdg_smoothed)/4)
+# beyond_half <- which(dB >= half_power)#[1]
+# cutoff <- beyond_half[length(beyond_half)] # the 3dB cutoff is the last frequency bin with above half power
+
+# cutoff_freq <- freq_welch[cutoff]
+# cutoff_freq_original <- freq[freq >= cutoff_freq][1]
+# cutoff_ind_og <- which(freq == cutoff_freq_original)
+
+# plot(pdg_original, type = "l")
+# abline(v = cutoff_ind_og, lty = 2, lwd = 2, col = "red")
+
 ########################################
 ##                Prior               ##
 ########################################
@@ -190,11 +212,8 @@ if (prior_type == "prior1") {
   prior_mean <- c(0, -4) #rep(0,2)
   prior_var <- diag(c(0.5, 0.5)) #diag(1, 2)
 } else {
-  # prior_mean <- c(2, -3) #rep(0,2)
-
-  prior_mean <- c(1, -3) #rep(0,2)
-  # prior_mean <- c(0, -3) #rep(0,2)
-  prior_var <- diag(c(1, 0.5)) #diag(1, 2)
+  prior_mean <- c(2, -3) #rep(0,2)
+  prior_var <- diag(c(0.5, 0.5)) #diag(1, 2)
 }
 
 if (plot_prior) {
@@ -218,6 +237,9 @@ if (plot_prior) {
 ########################################
 
 S <- 1000L
+# nblocks <- 100
+blocksize <- NULL# 100
+n_indiv <- find_cutoff_freq(y, nsegs = 20, power_prop = 1/2)$cutoff_ind #100
 
 if (use_tempering) {
   n_temper <- 5
@@ -260,7 +282,7 @@ if (rerun_rvgaw) {
   rvgaw_results <- run_rvgaw_sv(y = y, #sigma_eta = sigma_eta, sigma_eps = sigma_eps, 
                                 prior_mean = prior_mean, prior_var = prior_var, 
                                 deriv = "tf", 
-                                n_post_samples = n_post_samples * n_chains,
+                                n_post_samples = (n_post_samples - burn_in) * n_chains,
                                 S = S, use_tempering = use_tempering, 
                                 temper_first = temper_first,
                                 reorder = reorder,
@@ -384,7 +406,7 @@ hmc.post_samples_sigma_eta <- (hmc_results$draws[,,2])#sqrt(exp(hmc.theta_sigma)
 ##          HMC with the Whittle likelihood           ##
 ########################################################
 hmcw_filepath <- paste0(result_directory, "hmcw_results_n", n, 
-                         "_phi", phi_string, prior_type, "_", date, ".rds")
+                         "_phi", phi_string, "_", date, ".rds")
 
 if (rerun_hmcw) {
   
@@ -393,7 +415,8 @@ if (rerun_hmcw) {
   # burn_in <- 5000 # per chain
 
   # Compute periodogram
-  pgram_out <- compute_periodogram(y)
+  y_tilde <- log(y^2) - mean(y)
+  pgram_out <- compute_periodogram(y_tilde)
   freq <- pgram_out$freq
   I <- pgram_out$periodogram
 
@@ -458,7 +481,8 @@ hmcw.post_samples_sigma_eta <- c(hmcw_results$draws[,,2])
 if (plot_trajectories) {
   mu_phi <- sapply(rvgaw_results$mu, function(x) x[1])
   mu_eta <- sapply(rvgaw_results$mu, function(x) x[2])
-  
+
+  png(paste0("plots/sv_sim_trajectories", block_info, ".png"), width = 1000, height = 500)
   par(mfrow = c(1, 2))
   if (transform == "arctanh") {
     plot(tanh(mu_phi), type = "l", main = "Trajectory of phi")
@@ -469,6 +493,7 @@ if (plot_trajectories) {
   
   plot(sqrt(exp(mu_eta)), type = "l", main = "Trajectory of sigma_eta")
   abline(h = sigma_eta, lty = 2)
+  dev.off()
 }
 
 ## Estimation of kappa

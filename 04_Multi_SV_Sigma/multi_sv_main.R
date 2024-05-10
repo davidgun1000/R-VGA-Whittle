@@ -20,12 +20,12 @@ plot_trace <- F
 plot_trajectories <- F
 save_plots <- F
 
-rerun_rvgaw <- F
+rerun_rvgaw <- T
 rerun_mcmcw <- F
 rerun_hmc <- F
 rerun_hmcw <- F
 
-save_rvgaw_results <- F
+save_rvgaw_results <- T
 save_mcmcw_results <- F
 save_hmc_results <- F
 save_hmcw_results <- F
@@ -38,8 +38,6 @@ reorder_seed <- 2024
 # decreasing <- T
 use_median <- F
 # nblocks <- 100
-blocksize <- 500
-n_indiv <- 100
 
 ## HMC flags
 n_post_samples <- 10000
@@ -69,6 +67,8 @@ source("./source/run_rvgaw_multi_sv_block.R")
 source("./source/run_mcmc_multi_sv.R")
 source("./source/compute_whittle_likelihood_multi_sv.R")
 source("./source/compute_periodogram.R")
+source("./source/compute_periodogram_uni.R")
+
 # source("./source/run_mcmc_sv.R")
 # source("./source/compute_whittle_likelihood_sv.R")
 source("./source/construct_prior2.R")
@@ -77,7 +77,7 @@ source("./source/construct_Sigma.R")
 # source("./archived/compute_partial_whittle_likelihood.R")
 # source("./source/compute_grad_hessian.R")
 source("./source/compute_grad_hessian_block.R")
-
+source("./source/find_cutoff_freq.R")
 
 # List physical devices
 gpus <- tf$config$experimental$list_physical_devices('GPU')
@@ -109,14 +109,7 @@ Tfin <- 5000
 d <- 2L
 if (regenerate_data) {
  if (dataset == "5") {
-    # Phi <- diag(c(0.9, 0.8))
     Sigma_eta <- matrix(c(0.02, 0.005, 0.005, 0.01), 2, 2)
-    # nlower <- d*(d-1)/2
-    # diags <- 0.1*(1:d)
-    # lowers <- 0.05*(1:nlower)
-    # Sigma_eta <- diag(diags)
-    # Sigma_eta[lower.tri(Sigma_eta)] <- lowers
-    # Sigma_eta[upper.tri(Sigma_eta)] <- t(Sigma_eta)[upper.tri(Sigma_eta)]
     
   } else if (dataset == "hmc_est") {
     Phi <- diag(c(0.96, 0.97))
@@ -165,6 +158,40 @@ for (k in 1:d) {
 # hist(Y[1,])
 # hist(Y[2,])
 
+############################ Plot periodogram ##################################
+pgram_out <- compute_periodogram(Y)
+freq <- pgram_out$freq
+I <- pgram_out$periodogram
+
+I11 <- sapply(1:length(freq), function(i) I[,,i][1,1])
+I22 <- sapply(1:length(freq), function(i) I[,,i][2,2])
+I21 <- sapply(1:length(freq), function(i) I[,,i][2,1])
+
+coherence <- Mod(I21)^2 / (I11 * I22)
+# coherence <- sapply(1:length(freq), function(i) Mod(I[,,i][2,1])^2 / (I[,,i][1,1] * I[,,i][2,2]))
+
+test1 <- compute_periodogram_uni(Y[, 1])$periodogram
+test2 <- compute_periodogram_uni(Y[, 2])$periodogram
+
+df1 <- data.frame(freq = freq, periodogram = test1)
+df2 <- data.frame(freq = freq, periodogram = test2)
+
+df1 %>% ggplot() + geom_line(aes(x = freq, y = periodogram)) + 
+  ggtitle("Periodogram for series 1")
+
+df2 %>% ggplot() + geom_line(aes(x = freq, y = periodogram)) + 
+  ggtitle("Periodogram for series 2")
+
+nsegs <- 20
+power_prop <- 0.5
+
+f1 <- find_cutoff_freq(Y[, 1], nsegs = nsegs, power_prop = power_prop)$cutoff_ind
+f2 <- find_cutoff_freq(Y[, 2], nsegs = nsegs, power_prop = power_prop)$cutoff_ind
+
+# library(stats)
+# # Compute the cross-spectral density
+# csd_result <- spectrum(Y)
+# browser()
 ############################## Inference #######################################
 
 ## Result directory
@@ -396,6 +423,9 @@ if (plot_likelihood_surface) {
 ####?############################
 ##    R-VGAW implementation   ##
 ################################
+
+blocksize <- 100
+n_indiv <- max(f1, f2)
 
 if (use_tempering) {
   n_temper <- 5
