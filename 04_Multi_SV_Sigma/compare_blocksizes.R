@@ -25,10 +25,12 @@ library(tidyr)
 source("./source/run_rvgaw_multi_sv_block.R")
 # source("./source/run_mcmc_lgss_allparams.R")
 source("./source/compute_periodogram.R")
+source("./source/compute_periodogram_uni.R")
+
 source("./source/construct_prior2.R")
 source("./source/compute_grad_hessian_block.R")
 source("./source/construct_Sigma.R")
-
+source("./source/find_cutoff_freq.R")
 # source("./source/compute_kf_likelihood.R")
 # source("./source/compute_whittle_likelihood_lgss.R")
 # source("./source/update_sigma.R")
@@ -60,13 +62,11 @@ reorder_seed <- 2024
 # decreasing <- T
 transform <- "arctanh"
 prior_type <- "prior1"
-n_indiv <- 100
-blocksizes <- c(10, 50, 100, 300, 500, 1000)
 
 if (use_tempering) {
   n_temper <- 5
   K <- 100
-  temper_schedule <- rep(1 / K, K)
+  temper_schedule <- rep(1/K, K)
   temper_info <- ""
   if (temper_first) {
     temper_info <- paste0("_temperfirst", n_temper)
@@ -100,6 +100,29 @@ Sigma_eps <- multi_sv_data$Sigma_eps
 prior <- construct_prior(data = Y, prior_type = prior_type, use_cholesky = use_cholesky)
 prior_mean <- prior$prior_mean
 prior_var <- prior$prior_var
+
+Z <- log(Y^2) - colMeans(log(Y^2))
+pgram_out <- compute_periodogram(Z)
+freq <- pgram_out$freq
+I <- pgram_out$periodogram
+
+browser()
+## Blocking configurations
+power_prop <- 1/10
+nsegs <- 25
+cutoffs <- c()
+pdgs <- list()
+for (i in 1:d) {
+  welch_output <- find_cutoff_freq(Y[, i], nsegs = nsegs, power_prop = power_prop)
+  cutoffs[i] <- welch_output$cutoff_ind
+  pdgs[[i]] <- welch_output$pdg_welch
+}
+
+n_indiv <- max(cutoffs) # maximum between all the time series
+# n_indiv <- 100
+blocksizes <- c(0, 10, 50, 100, 300, 500, 1000)
+
+browser()
 
 ## Running R-VGA with different block sizes
 rvgaw_post_samples <- list()

@@ -12,6 +12,7 @@ reticulate::use_condaenv("myenv", required = TRUE)
 library(keras)
 library(stats)
 library(bspec)
+library(tidyr)
 library(ggplot2)
 library(grid)
 library(gridExtra)
@@ -69,7 +70,7 @@ burn_in <- 5000 # per chain
 n_chains <- 2
 
 ## Flags
-rerun_rvgaw <- T
+rerun_rvgaw <- F
 rerun_mcmcw <- F
 rerun_hmc <- F
 rerun_hmcw <- F
@@ -79,7 +80,7 @@ save_mcmcw_results <- F
 save_hmc_results <- F
 save_hmcw_results <- F
 
-save_plots <- F
+save_plots <- T
 
 ## Result directory
 # result_directory <- paste0("./results/", prior_type, "/")
@@ -238,8 +239,8 @@ if (plot_prior) {
 
 S <- 1000L
 # nblocks <- 100
-blocksize <- NULL# 100
-n_indiv <- find_cutoff_freq(y, nsegs = 20, power_prop = 1/2)$cutoff_ind #100
+blocksize <- 500
+n_indiv <- find_cutoff_freq(y, nsegs = 25, power_prop = 1/2)$cutoff_ind #100
 
 if (use_tempering) {
   n_temper <- 5
@@ -415,7 +416,7 @@ if (rerun_hmcw) {
   # burn_in <- 5000 # per chain
 
   # Compute periodogram
-  y_tilde <- log(y^2) - mean(y)
+  y_tilde <- log(y^2) - mean(log(y^2))
   pgram_out <- compute_periodogram(y_tilde)
   freq <- pgram_out$freq
   I <- pgram_out$periodogram
@@ -480,19 +481,44 @@ hmcw.post_samples_sigma_eta <- c(hmcw_results$draws[,,2])
 ## Trajectories
 if (plot_trajectories) {
   mu_phi <- sapply(rvgaw_results$mu, function(x) x[1])
-  mu_eta <- sapply(rvgaw_results$mu, function(x) x[2])
+  mu_sigma_eta <- sapply(rvgaw_results$mu, function(x) x[2])
 
-  png(paste0("plots/sv_sim_trajectories", block_info, ".png"), width = 1000, height = 500)
-  par(mfrow = c(1, 2))
   if (transform == "arctanh") {
-    plot(tanh(mu_phi), type = "l", main = "Trajectory of phi")
-  } else {
-    plot(1 / (1 + exp(-mu_phi)), type = "l", main = "Trajectory of phi")
+    mu_phi <- tanh(mu_phi)
+  } else { # logit transform
+    mu_phi <- exp(mu_phi) / (1 + exp(mu_phi))
   }
-  abline(h = phi, lty = 2)
-  
-  plot(sqrt(exp(mu_eta)), type = "l", main = "Trajectory of sigma_eta")
-  abline(h = sigma_eta, lty = 2)
+  mu_sigma_eta <- sqrt(exp(mu_sigma_eta))
+
+  true_df <- data.frame(param = c("phi", "sigma[eta]"), 
+                        value = c(phi, sigma_eta))
+
+  trajectory_df <- data.frame(phi = mu_phi, sigma_eta = mu_sigma_eta)
+  names(trajectory_df) <- c("phi", "sigma[eta]")
+  trajectory_df$iter <- 1:nrow(trajectory_df)
+
+  trajectory_df_long <- trajectory_df %>% pivot_longer(cols = !iter, 
+                                                      names_to = "param", values_to = "value")
+  trajectory_plot <- trajectory_df_long %>% ggplot() + 
+    geom_line(aes(x = iter, y = value), linewidth = 1) +
+    facet_wrap(~param, scales = "free", labeller = label_parsed) +
+    geom_hline(data = true_df, aes(yintercept = value), linetype = "dashed", linewidth = 1.5) +
+    theme_bw() + theme(text = element_text(size = 28)) + 
+    xlab("Iterations") + ylab("Value")
+
+
+  png(paste0("plots/trajectories_sv_sim", block_info, ".png"), width = 1000, height = 500)
+  # par(mfrow = c(1, 2))
+  # if (transform == "arctanh") {
+  #   plot(tanh(mu_phi), type = "l", main = "Trajectory of phi")
+  # } else {
+  #   plot(1 / (1 + exp(-mu_phi)), type = "l", main = "Trajectory of phi")
+  # }
+  # abline(h = phi, lty = 2)
+  # plot(sqrt(exp(mu_eta)), type = "l", main = "Trajectory of sigma_eta")
+  # abline(h = sigma_eta, lty = 2)
+    print(trajectory_plot)                                                      
+
   dev.off()
 }
 

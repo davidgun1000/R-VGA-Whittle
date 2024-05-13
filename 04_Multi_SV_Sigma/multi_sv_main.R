@@ -63,7 +63,6 @@ library(gtable)
 
 # source("./source/run_rvgaw_multi_sv.R")
 source("./source/run_rvgaw_multi_sv_block.R")
-
 source("./source/run_mcmc_multi_sv.R")
 source("./source/compute_whittle_likelihood_multi_sv.R")
 source("./source/compute_periodogram.R")
@@ -159,7 +158,8 @@ for (k in 1:d) {
 # hist(Y[2,])
 
 ############################ Plot periodogram ##################################
-pgram_out <- compute_periodogram(Y)
+Z <- log(Y^2) - colMeans(log(Y^2))
+pgram_out <- compute_periodogram(Z)
 freq <- pgram_out$freq
 I <- pgram_out$periodogram
 
@@ -170,23 +170,17 @@ I21 <- sapply(1:length(freq), function(i) I[,,i][2,1])
 coherence <- Mod(I21)^2 / (I11 * I22)
 # coherence <- sapply(1:length(freq), function(i) Mod(I[,,i][2,1])^2 / (I[,,i][1,1] * I[,,i][2,2]))
 
-test1 <- compute_periodogram_uni(Y[, 1])$periodogram
-test2 <- compute_periodogram_uni(Y[, 2])$periodogram
+# test1 <- compute_periodogram_uni(Y[, 1])$periodogram
+# test2 <- compute_periodogram_uni(Y[, 2])$periodogram
 
-df1 <- data.frame(freq = freq, periodogram = test1)
-df2 <- data.frame(freq = freq, periodogram = test2)
+# df1 <- data.frame(freq = freq, periodogram = test1)
+# df2 <- data.frame(freq = freq, periodogram = test2)
 
-df1 %>% ggplot() + geom_line(aes(x = freq, y = periodogram)) + 
-  ggtitle("Periodogram for series 1")
+# df1 %>% ggplot() + geom_line(aes(x = freq, y = periodogram)) + 
+#   ggtitle("Periodogram for series 1")
 
-df2 %>% ggplot() + geom_line(aes(x = freq, y = periodogram)) + 
-  ggtitle("Periodogram for series 2")
-
-nsegs <- 20
-power_prop <- 0.5
-
-f1 <- find_cutoff_freq(Y[, 1], nsegs = nsegs, power_prop = power_prop)$cutoff_ind
-f2 <- find_cutoff_freq(Y[, 2], nsegs = nsegs, power_prop = power_prop)$cutoff_ind
+# df2 %>% ggplot() + geom_line(aes(x = freq, y = periodogram)) + 
+#   ggtitle("Periodogram for series 2")
 
 # library(stats)
 # # Compute the cross-spectral density
@@ -420,12 +414,18 @@ if (plot_likelihood_surface) {
 # mcmcw1.post_samples_sigma_eta2 <- as.mcmc(mcmcw1_results$post_samples$sigma_eta[-(1:burn_in)]^2)
 # mcmcw.post_samples_xi <- as.mcmc(mcmcw_results$post_samples$sigma_xi[-(1:burn_in)])
 
-####?############################
+################################
 ##    R-VGAW implementation   ##
 ################################
 
-blocksize <- 100
-n_indiv <- max(f1, f2)
+blocksize <- 500
+
+nsegs <- 25
+power_prop <- 1/2
+
+c1 <- find_cutoff_freq(Y[, 1], nsegs = nsegs, power_prop = power_prop)$cutoff_ind
+c2 <- find_cutoff_freq(Y[, 2], nsegs = nsegs, power_prop = power_prop)$cutoff_ind
+n_indiv <- max(c1, c2)
 
 if (use_tempering) {
   n_temper <- 5
@@ -667,11 +667,11 @@ if (rerun_hmcw) {
   # freq <- 2 * pi * k_in_likelihood / Tfin
   
   # # ## astsa package
-  # Z <- log(Y^2) - colMeans(log(Y^2))
+  Z <- log(Y^2) - colMeans(log(Y^2))
   # fft_out <- mvspec(Z, detrend = F, plot = F)
   # I <- fft_out$fxx
 
-  pgram_out <- compute_periodogram(Y)
+  pgram_out <- compute_periodogram(Z)
   freq <- pgram_out$freq
   I <- pgram_out$periodogram
   

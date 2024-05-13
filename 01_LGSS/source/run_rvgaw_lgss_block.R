@@ -79,12 +79,14 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
     all_blocks <- as.list(1:length(freq))
 
     # if (!is.null(nblocks)) {
-    if (!is.null(blocksize)) {
+    if (blocksize != 0) { # if blocksize = 0 then do not use blocking, 
+                          # else split into blocks of length blocksize
         
-        # Split frequencies into blocks
-        # Last block may not have the same size as the rest
-        # if the number of frequencies to be divided into blocks
-        # is not divisible by the number of blocks
+        
+    # Split frequencies into approximately equal blocks
+    # Blocks may not be the same size if the number of frequencies 
+    # is not divisible by the block length
+
         indiv <- list()
         vec <- c()
         if (reorder == 0) { # leave the first n_indiv frequencies alone, cut the rest into blocks

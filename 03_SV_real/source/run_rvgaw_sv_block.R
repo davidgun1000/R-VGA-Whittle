@@ -21,7 +21,8 @@ run_rvgaw_sv <- function(y, phi = NULL, sigma_eta = NULL, sigma_xi = NULL,
   rvgaw.prec <- list()
   rvgaw.prec[[1]] <- chol2inv(chol(prior_var))
   
-  pgram_out <- compute_periodogram(y)
+  y_tilde <- log(y^2) - mean(log(y^2))
+  pgram_out <- compute_periodogram(y_tilde)
   freq <- pgram_out$freq
   I <- pgram_out$periodogram
   

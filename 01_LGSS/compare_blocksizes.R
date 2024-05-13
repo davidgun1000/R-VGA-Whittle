@@ -65,11 +65,11 @@ reorder <- 0 #"decreasing"
 reorder_seed <- 2024
 # decreasing <- T
 transform <- "arctanh"
-power_prop <- 1/10
-nsegs <- 20
+power_prop <- 1/2
+nsegs <- 25
 welch_output <- find_cutoff_freq(y, nsegs = nsegs, power_prop = power_prop)
 n_indiv <- welch_output$cutoff_ind #500
-blocksizes <- c(10, 50, 100, 300, 500, 1000)
+blocksizes <- c(0, 10, 50, 100, 300, 500, 1000)
 
 if (use_tempering) {
   n_temper <- 5
@@ -171,6 +171,7 @@ for (p in 1:param_dim) {
   rvgaw_post_samples_list <- lapply(rvgaw_post_samples, function(x) x[[p]])
   rvgaw_post_samples_df <- as.data.frame(do.call(cbind, rvgaw_post_samples_list))
 
+  blocksizes <- c("None", blocksizes[2:length(blocksizes)])
   colnames(rvgaw_post_samples_df) <- sapply(blocksizes, function(x) paste0("blocksize", x))
   df_list[[p]] <- rvgaw_post_samples_df
 
@@ -191,7 +192,7 @@ for (p in 1:param_dim) {
   #                                       names_to = "param",
   #                                       values_to = "post_samples")
   hmcw_post_samples <- data.frame(val = hmcw_df[, p])
-  # hmc_post_samples <- data.frame(val = hmc_df[, p])
+  hmc_post_samples <- data.frame(val = hmc_df[, p])
 
   ## Plot
   true_vals.df <- data.frame(name = param_names[p], val = param_values[p])
@@ -199,8 +200,9 @@ for (p in 1:param_dim) {
   plot <- ggplot(rvgaw_post_samples_df_long, aes(x = post_samples)) +
     geom_density(aes(col = blocksize), lwd = 1.5) +
     geom_density(data = hmcw_post_samples, aes(x = val), 
-                col = "black", linewidth = 1) +
-    # geom_density(data = hmc_post_samples, aes(x = val), col = "deepskyblue", lwd = 1) +
+                col = "black", linetype = 2, linewidth = 1.5) +
+    geom_density(data = hmc_post_samples, aes(x = val), 
+                col = "black", linetype = 3, linewidth = 1.5) +
     geom_vline(data = true_vals.df, aes(xintercept=val),
                color="black", linetype="dashed", linewidth=1) +
     # geom_density(aes(x = hmcw_df[, p]), col = "goldenrod") +
@@ -285,18 +287,19 @@ pdg_plot <- pdg_df %>% ggplot(aes(x = freq, y = pdg)) +
                         geom_line(data = welch_pdg_df, aes(x = freq, y = pdg), 
                                     color = "salmon", linewidth = 1.5) +
                         geom_vline(xintercept = power2_cutoff, 
-                                    linetype = 2, color = "red", linewidth = 1) +
+                                    linetype = 2, color = "red", linewidth = 1.5) +
                         # geom_line(data = welch_power5_df, aes(x = freq, y = pdg), 
                         #             color = "salmon", linewidth = 1.5) +
                         geom_vline(xintercept = power5_cutoff, 
-                                    linetype = 2, color = "blue", linewidth = 1) +
+                                    linetype = 3, color = "cornflowerblue", linewidth = 1.5) +
                         geom_vline(xintercept = power10_cutoff, 
-                                    linetype = 2, color = "green", linewidth = 1) +
+                                    linetype = 4, color = "mediumpurple", linewidth = 1.5) +
                         labs(x = "Frequency (rad/s)", y = "Power") +
                         xlim(c(0, 1)) +
                         theme_bw() +
                         theme(text = element_text(size = 24))
 
+png("./plots/blocksize_test/cutoff_freqs_lgss.png", width = 800, height = 400)
 print(pdg_plot)
-
+dev.off()
 

@@ -27,6 +27,7 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   rvgaw.prec[[1]] <- chol2inv(chol(prior_var))
   
   # ## Calculation of Whittle likelihood
+  Y <- log(Y^2) - colMeans(log(Y^2))
   pgram_out <- compute_periodogram(Y)
   freq <- pgram_out$freq
   I <- pgram_out$periodogram
@@ -68,12 +69,10 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   all_blocks <- as.list(1:length(freq))
   
   # if (!is.null(nblocks)) {
-  if (!is.null(blocksize)) {
+  if (blocksize != 0) {
       
-    # Split frequencies into blocks
-    # Last block may not have the same size as the rest
-    # if the number of frequencies to be divided into blocks
-    # is not divisible by the number of blocks
+    # Split frequencies into blocks of approx equal size
+
     indiv <- list()
     vec <- c()
     if (reorder == 0) { # leave the first n_indiv frequencies alone, cut the rest into blocks
@@ -106,7 +105,7 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   
   n_updates <- length(all_blocks)
   for (i in 1:n_updates) {
-    cat("i =", i, "\n")
+    # cat("i =", i, "\n")
     blockinds <- all_blocks[[i]]
     
     # if (i == 106) {

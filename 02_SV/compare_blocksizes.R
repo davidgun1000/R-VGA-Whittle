@@ -66,11 +66,11 @@ reorder <- 0 #"decreasing"
 reorder_seed <- 2024
 # decreasing <- T
 transform <- "arctanh"
-nsegs <- 20
+nsegs <- 25
 power_prop <- 1/10
 welch_output <- find_cutoff_freq(y, nsegs = nsegs, power_prop = power_prop)
 n_indiv <- welch_output$cutoff_ind #100
-blocksizes <- c(10, 50, 100, 300, 500, 1000)
+blocksizes <- c(0, 10, 50, 100, 300, 500, 1000)
 # blocksizes <- 1000
 
 if (use_tempering) {
@@ -175,8 +175,9 @@ for (p in 1:param_dim) {
   rvgaw_post_samples_list <- lapply(rvgaw_post_samples, function(x) x[[p]])
   rvgaw_post_samples_df <- as.data.frame(do.call(cbind, rvgaw_post_samples_list))
 
+  blocksizes <- c("None", blocksizes[2:length(blocksizes)])
   colnames(rvgaw_post_samples_df) <- sapply(blocksizes, function(x) paste0("blocksize", x))
-  df_list[[p]] <- rvgaw_post_samples_df
+    df_list[[p]] <- rvgaw_post_samples_df
 
   rvgaw_post_samples_df_long <- rvgaw_post_samples_df %>% pivot_longer(cols = starts_with("blocksize"),
                     names_to = "blocksize",
@@ -188,6 +189,7 @@ for (p in 1:param_dim) {
   # rvgaw_post_samples_df_long$param <- rep(param_names[p], nrow(rvgaw_post_samples_df_long))
   
   hmcw_post_samples <- data.frame(val = hmcw_df[, p])
+  hmc_post_samples <- data.frame(val = hmc_df[, p])
   
   ## Plot
   true_vals.df <- data.frame(name = param_names[p], val = param_values[p])
@@ -195,7 +197,9 @@ for (p in 1:param_dim) {
   plot <- ggplot(rvgaw_post_samples_df_long, aes(x = post_samples)) +
     geom_density(aes(col = blocksize), lwd = 1.5) +
     geom_density(data = hmcw_post_samples, aes(x = val), 
-                col = "black", linewidth = 1) +
+                col = "black", linetype = "dashed", linewidth = 1) +
+    geom_density(data = hmc_post_samples, aes(x = val),
+                col = "black", linetype = "dotted", linewidth = 1) +
     # geom_density(data = hmcw.df, col = "goldenrod", lwd = 1) +
     # geom_density(data = hmc.df, col = "deepskyblue", lwd = 1) +
     geom_vline(data = true_vals.df, aes(xintercept=val),
@@ -252,11 +256,15 @@ if (save_plots) {
 
 ## Plot all cutoff freqs in one plot
 welch_power2 <- find_cutoff_freq(y, nsegs = nsegs, power_prop = 1/2)
+welch_power4 <- find_cutoff_freq(y, nsegs = nsegs, power_prop = 1/4)
 welch_power5 <- find_cutoff_freq(y, nsegs = nsegs, power_prop = 1/5)
+# welch_power8 <- find_cutoff_freq(y, nsegs = nsegs, power_prop = 1/8)
 welch_power10 <- find_cutoff_freq(y, nsegs = nsegs, power_prop = 1/10)
 
 power2_cutoff <- welch_power2$cutoff_freq
+power4_cutoff <- welch_power4$cutoff_freq
 power5_cutoff <- welch_power5$cutoff_freq
+# power8_cutoff <- welch_power8$cutoff_freq
 power10_cutoff <- welch_power10$cutoff_freq
 
 welch_pdg_df <- data.frame(freq = welch_power2$freq_welch, pdg = welch_power2$pdg_welch)
@@ -272,16 +280,22 @@ pdg_plot <- pdg_df %>% ggplot(aes(x = freq, y = pdg)) +
                         geom_line(data = welch_pdg_df, aes(x = freq, y = pdg), 
                                     color = "salmon", linewidth = 1.5) +
                         geom_vline(xintercept = power2_cutoff, 
-                                    linetype = 2, color = "red", linewidth = 1) +
+                                    linetype = 2, color = "red", linewidth = 1.5) +
                         # geom_line(data = welch_power5_df, aes(x = freq, y = pdg), 
                         #             color = "salmon", linewidth = 1.5) +
+                        # geom_vline(xintercept = power4_cutoff, 
+                        #             linetype = 3, color = "mediumpurple", linewidth = 1) +
                         geom_vline(xintercept = power5_cutoff, 
-                                    linetype = 2, color = "blue", linewidth = 1) +
+                                    linetype = 3, color = "cornflowerblue", linewidth = 1.5) +
+                        # geom_vline(xintercept = power8_cutoff, 
+                        #             linetype = 3, color = "goldenrod", linewidth = 1) +
                         geom_vline(xintercept = power10_cutoff, 
-                                    linetype = 2, color = "green", linewidth = 1) +
+                                    linetype = 4, color = "mediumpurple", linewidth = 1.5) +
                         labs(x = "Frequency (rad/s)", y = "Power") +
                         xlim(c(0, 1)) +
                         theme_bw() +
                         theme(text = element_text(size = 24))
 
+png("./plots/blocksize_test/cutoff_freqs_sv_sim.png", width = 800, height = 400)
 print(pdg_plot)
+dev.off()

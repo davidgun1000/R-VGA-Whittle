@@ -89,9 +89,6 @@ reorder <- 0 #"decreasing"
 reorder_seed <- 2024
 # decreasing <- F
 use_median <- F
-# nblocks <- 100
-blocksize <- 500
-n_indiv <- 100
 
 ## HMC flags
 n_post_samples <- 10000
@@ -407,7 +404,14 @@ if (!is.null(blocksize)) {
 }
 
 S <- 1000L
-a_vals <- 1
+# a_vals <- 1
+blocksize <- 500
+
+nsegs <- 25
+power_prop <- 1/2
+c1 <- find_cutoff_freq(Y[, 1], nsegs = nsegs, power_prop = power_prop)$cutoff_ind
+c2 <- find_cutoff_freq(Y[, 2], nsegs = nsegs, power_prop = power_prop)$cutoff_ind
+n_indiv <- max(c1, c2)
 
 ################ R-VGA starts here #################
 print("Starting R-VGAL with Whittle likelihood...")
@@ -426,7 +430,6 @@ if (rerun_rvgaw) {
                                       reorder = reorder, 
                                       # decreasing = decreasing,
                                       reorder_seed = reorder_seed,
-                                      # nblocks = nblocks,
                                       blocksize = blocksize,
                                       n_indiv = n_indiv)
   if (save_rvgaw_results) {

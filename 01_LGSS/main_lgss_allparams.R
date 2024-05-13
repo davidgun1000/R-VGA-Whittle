@@ -70,7 +70,7 @@ save_hmc_results <- F
 save_hmcw_results <- F
 
 plot_likelihood_surface <- F
-plot_trajectories <- T
+plot_trajectories <- F
 save_plots <- F
 
 ## R-VGA flags
@@ -194,15 +194,15 @@ for (i in 1:length(phi_grid)) {
 # 
 # hist(phi_samples, main = "Samples from the prior of phi")
 
-################################################################################
+###############################################################################
 ##                      R-VGA with Whittle likelihood                         ##
 ################################################################################
 
 S <- 1000L
 
 # nblocks <- 100
-n_indiv <- find_cutoff_freq(y, nsegs = 20, power_prop = 1/2)$cutoff_ind #500 #220 #1000 #807
-blocksize <- NULL #100 #floor((n-1)/2) - n_indiv 
+n_indiv <- find_cutoff_freq(y, nsegs = 25, power_prop = 1/2)$cutoff_ind #500 #220 #1000 #807
+blocksize <- 500 #100 #floor((n-1)/2) - n_indiv 
 
 if (use_tempering) {
   n_temper <- 5
@@ -533,10 +533,10 @@ if (plot_trajectories) {
   trajectory_df_long <- trajectory_df %>% pivot_longer(cols = !iter, 
                                                       names_to = "param", values_to = "value")
   trajectory_plot <- trajectory_df_long %>% ggplot() + 
-    geom_line(aes(x = iter, y = value)) +
+    geom_line(aes(x = iter, y = value), linewidth = 1) +
     facet_wrap(~param, scales = "free", labeller = label_parsed) +
-    geom_hline(data = true_df, aes(yintercept = value), linetype = "dashed") +
-    theme_bw() + theme(text = element_text(size = 28)) + 
+    geom_hline(data = true_df, aes(yintercept = value), linetype = "dashed", linewidth = 1.5) +
+    theme_bw() + theme(text = element_text(size = 30)) + 
     xlab("Iterations") + ylab("Value")
   print(trajectory_plot)                                                      
 

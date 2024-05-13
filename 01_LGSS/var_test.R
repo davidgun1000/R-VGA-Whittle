@@ -27,7 +27,7 @@ source("./source/find_cutoff_freq.R")
 # source("./source/run_hmc_lgss.R")
 
 rerun_rvgaw <- T
-save_results <- T
+save_results <- F
 use_tempering <- T
 temper_first <- T
 reorder <- 0 #"decreasing"
@@ -60,11 +60,11 @@ prior_var <- diag(c(1, 1, 1))
 n_post_samples <- 10000
 runs <- 10
 # mc_samples <- c(100L, 500L, 1000L, 5000L)
-S <- 500L
+S <- 1000L
 
 # nblocks <- 100
 power_prop <- 1/2
-n_indiv <- find_cutoff_freq(y, nsegs = 20, power_prop = power_prop)$cutoff_ind #500
+n_indiv <- find_cutoff_freq(y, nsegs = 25, power_prop = power_prop)$cutoff_ind #500
 # n_indiv <- 1000 #807
 blocksize <- 500 #floor((n-1)/2) - n_indiv 
 
@@ -189,7 +189,7 @@ plot <- long_df %>% ggplot(aes(x = value, col = as.factor(run))) + geom_density(
 print(plot)
 
 if (save_results) {
-  plot_name <- paste0("var_test_lgss_S", S, "_power", 1/power_prop, "_", date, ".png")
+  plot_name <- paste0("var_test_lgss_S", S, "_power", 1/power_prop, block_info, "_", date, ".png")
   png(paste0("./var_test/plots/", plot_name), width = 1500, height = 500)
   print(plot)
   dev.off()
