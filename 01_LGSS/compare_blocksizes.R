@@ -34,7 +34,7 @@ result_directory <- "./results/blocksize_test/"
 ## Flags
 rerun_test <- F
 save_rvgaw_results <- F
-save_plots <- T
+save_plots <- F
 
 date <- "20230525"
 n <- 10000
@@ -69,7 +69,7 @@ power_prop <- 1/2
 nsegs <- 25
 welch_output <- find_cutoff_freq(y, nsegs = nsegs, power_prop = power_prop)
 n_indiv <- welch_output$cutoff_ind #500
-blocksizes <- c(0, 10, 50, 100, 300, 500, 1000)
+blocksizes <- c(0, 100) # c(0, 10, 50, 100, 300, 500, 1000)
 
 if (use_tempering) {
   n_temper <- 5
@@ -218,10 +218,14 @@ for (p in 1:param_dim) {
 grid.arrange(grobs = plots, nrow = 1, ncol = 3)
 
 if (save_plots) {
-  plot_file <- paste0("compare_blocksizes_lgss_", n, temper_info, reorder_info, 
-                      # "_", n_indiv, "indiv",
-                      "_power", 1/power_prop,
-                      "_", transform, "_", date, ".png")
+  # plot_file <- paste0("compare_blocksizes_lgss_", n, temper_info, reorder_info, 
+  #                     # "_", n_indiv, "indiv",
+  #                     "_power", 1/power_prop,
+  #                     "_", transform, "_", date, ".png")
+  plot_file <- paste0("compare_blockvsnot_lgss_", n, temper_info, reorder_info, 
+  # "_", n_indiv, "indiv",
+  "_power", 1/power_prop,
+  "_", transform, "_", date, ".png")
   filepath = paste0("./plots/blocksize_test/", plot_file)
   png(filepath, width = 2000, height = 500)
   grid.arrange(grobs = plots, nrow = 1, ncol = 3)
@@ -298,8 +302,9 @@ pdg_plot <- pdg_df %>% ggplot(aes(x = freq, y = pdg)) +
                         xlim(c(0, 1)) +
                         theme_bw() +
                         theme(text = element_text(size = 24))
-
-png("./plots/blocksize_test/cutoff_freqs_lgss.png", width = 800, height = 400)
-print(pdg_plot)
-dev.off()
+if (save_plots) {
+  png("./plots/blocksize_test/cutoff_freqs_lgss.png", width = 800, height = 400)
+  print(pdg_plot)
+  dev.off()
+}
 

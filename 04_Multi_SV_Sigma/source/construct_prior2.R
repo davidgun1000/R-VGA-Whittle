@@ -17,8 +17,8 @@ construct_prior <- function(data, prior_type = "prior1",
   if (prior_type == "prior0") {
     prior_mean <- rep(0, param_dim)
   } else {
-    # prior_mean <- c(rep(2, m), rep(-3, m), rep(0, m*(m-1)/2))
-    prior_mean <- c(rep(2, m), rep(-3, m), rep(0, m*(m-1)/2))
+    prior_mean <- c(rep(2, m), c(-2, -3), rep(0, m*(m-1)/2))
+    # prior_mean <- c(rep(2, m), rep(-2, m), rep(0, m*(m-1)/2))
     
   }
   
@@ -82,7 +82,7 @@ construct_prior <- function(data, prior_type = "prior1",
     diag_var_Sigma <- c(0.5, 0.05, 0.05) #rep(0.5, m*(m-1)/2 + m)
   } else {
     # diag_var_Sigma <- rep(0.01, m)
-    diag_var_Sigma <- rep(0.1, m)
+    diag_var_Sigma <- rep(0.5, m)
   }
   
   ## now put the prior of Phi and L together so that

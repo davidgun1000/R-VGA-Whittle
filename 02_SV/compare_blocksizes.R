@@ -33,8 +33,8 @@ result_directory <- "./results/blocksize_test/"
 
 ## Flags
 rerun_test <- T
-save_rvgaw_results <- T
-save_plots <- T
+save_rvgaw_results <- F
+save_plots <- F
 
 date <- 20240214
 n <- 10000
@@ -67,10 +67,10 @@ reorder_seed <- 2024
 # decreasing <- T
 transform <- "arctanh"
 nsegs <- 25
-power_prop <- 1/10
+power_prop <- 1/2
 welch_output <- find_cutoff_freq(y, nsegs = nsegs, power_prop = power_prop)
 n_indiv <- welch_output$cutoff_ind #100
-blocksizes <- c(0, 10, 50, 100, 300, 500, 1000)
+blocksizes <- c(0, 100) #c(0, 10, 50, 100, 300, 500, 1000)
 # blocksizes <- 1000
 
 if (use_tempering) {
@@ -215,10 +215,14 @@ for (p in 1:param_dim) {
 grid.arrange(grobs = plots, nrow = 1, ncol = param_dim)
 
 if (save_plots) {
-  plot_file <- paste0("compare_blocksizes_sv_sim_", n, temper_info, reorder_info,
-                      # "_", n_indiv, "indiv",
-                      "_power", 1/power_prop,
-                      "_", transform, "_", date, ".png")
+  # plot_file <- paste0("compare_blocksizes_sv_sim_", n, temper_info, reorder_info,
+  #                     # "_", n_indiv, "indiv",
+  #                     "_power", 1/power_prop,
+  #                     "_", transform, "_", date, ".png")
+  plot_file <- paste0("compare_blockvsnot_sv_sim_", n, temper_info, reorder_info,
+  # "_", n_indiv, "indiv",
+  "_power", 1/power_prop,
+  "_", transform, "_", date, ".png")
   filepath = paste0("./plots/blocksize_test/", plot_file)
   png(filepath, width = 1200, height = 500)
   grid.arrange(grobs = plots, nrow = 1, ncol = param_dim)

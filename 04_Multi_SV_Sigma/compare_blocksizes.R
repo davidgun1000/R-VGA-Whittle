@@ -37,12 +37,12 @@ source("./source/find_cutoff_freq.R")
 # source("./source/run_hmc_lgss.R")
 
 ## Flags
-rerun_test <- T
-save_rvgaw_results <- T
-save_plots <- T
+rerun_test <- F
+save_rvgaw_results <- F
+save_plots <- F
 
 date <- "20240227"
-Tfin <- 10000
+Tfin <- 5000
 d <- 2 ## time series dimension
 dataset <- "5" # "hmc_est"
 
@@ -90,11 +90,14 @@ if (reorder == "random") {
 ## Read data
 print("Reading saved data...")
 multi_sv_data <- readRDS(file = paste0("./data/multi_sv_data_", d, "d_Tfin", Tfin, "_", date, "_", dataset, ".rds"))
+
 X <- multi_sv_data$X
 Y <- multi_sv_data$Y
 Phi <- multi_sv_data$Phi
 Sigma_eta <- multi_sv_data$Sigma_eta
 Sigma_eps <- multi_sv_data$Sigma_eps
+
+browser()
 
 ## Prior
 prior <- construct_prior(data = Y, prior_type = prior_type, use_cholesky = use_cholesky)
@@ -106,23 +109,34 @@ pgram_out <- compute_periodogram(Z)
 freq <- pgram_out$freq
 I <- pgram_out$periodogram
 
-browser()
 ## Blocking configurations
-power_prop <- 1/10
+power_prop <- 1/2
 nsegs <- 25
-cutoffs <- c()
-pdgs <- list()
-for (i in 1:d) {
-  welch_output <- find_cutoff_freq(Y[, i], nsegs = nsegs, power_prop = power_prop)
-  cutoffs[i] <- welch_output$cutoff_ind
-  pdgs[[i]] <- welch_output$pdg_welch
-}
+# cutoffs <- c()
+# pdgs <- list()
+# for (i in 1:d) {
+#   welch_output <- find_cutoff_freq(Y[, i], nsegs = nsegs, power_prop = power_prop)
+#   cutoffs[i] <- welch_output$cutoff_ind
+#   pdgs[[i]] <- welch_output$pdg_welch
+# }
 
-n_indiv <- max(cutoffs) # maximum between all the time series
+# nsegs <- 25
+# power_prop <- 1/2
+
+welch_output1 <- find_cutoff_freq(Y[, 1], nsegs = nsegs, power_prop = power_prop)
+welch_output2 <- find_cutoff_freq(Y[, 2], nsegs = nsegs, power_prop = power_prop)
+c1 <- welch_output1$cutoff_ind
+c2 <- welch_output2$cutoff_ind
+n_indiv <- max(c1, c2)
+
+pdg_plot1 <- welch_output1$pdg_plot
+pdg_plot2 <- welch_output2$pdg_plot
+png("./plots/blocksize_test/bivariate_sv_pdg_plot.png", width = 2000, height = 500)
+grid.arrange(pdg_plot1, pdg_plot2, nrow = 1)
+dev.off()
+# n_indiv <- max(cutoffs) # maximum between all the time series
 # n_indiv <- 100
 blocksizes <- c(0, 10, 50, 100, 300, 500, 1000)
-
-browser()
 
 ## Running R-VGA with different block sizes
 rvgaw_post_samples <- list()

@@ -41,11 +41,11 @@ find_cutoff_freq <- function(signal, nsegs, power_prop = 0.5) {
     geom_line(data = pdg_welch_df, aes(x = freq, y = pdg), 
                 color = "salmon", linewidth = 1.5) +
     geom_vline(xintercept = cutoff_freq_og, 
-                linetype = 2, color = "red", linewidth = 1) +
+                linetype = 2, color = "red", linewidth = 1.5) +
     labs(x = "Frequency (rad/s)", y = "Power") +
     xlim(c(0, 1)) +
     theme_bw() +
-    theme(text = element_text(size = 24))
+    theme(text = element_text(size = 36))
 
     print(pdg_plot)
 

@@ -113,7 +113,7 @@ run_rvgaw_lgss <- function(y, phi = NULL, sigma_eta = NULL, sigma_eps = NULL,
             indiv <- as.list(1:n_indiv)
             all_blocks <- c(indiv, blocks)    
           }
-             
+            
         } else if (reorder == "decreasing") { # leave the last n_indiv frequencies alone, cut the rest into blocks
             indiv <- as.list((length(freq) - n_indiv):length(freq))
             vec <- 1:(length(freq) - n_indiv)

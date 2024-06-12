@@ -202,7 +202,7 @@ S <- 1000L
 
 # nblocks <- 100
 n_indiv <- find_cutoff_freq(y, nsegs = 25, power_prop = 1/2)$cutoff_ind #500 #220 #1000 #807
-blocksize <- 500 #100 #floor((n-1)/2) - n_indiv 
+blocksize <- 100 #floor((n-1)/2) - n_indiv 
 
 if (use_tempering) {
   n_temper <- 5
@@ -393,14 +393,42 @@ hmcw.post_samples_eps <- c(hmcw_results$draws[,,3])
 ##                            Posterior densities                             ##
 ################################################################################
 
+hmc.post_samples_phi_mcmc <- mcmc(c(hmc.post_samples_phi))
+hmc.post_samples_sigma_eta_mcmc <- mcmc(c(hmc.post_samples_eta))
+hmc.post_samples_sigma_eps_mcmc <- mcmc(c(hmc.post_samples_eps))
+
+## ACF, ESS and inefficiency factor
+hmc.acf <- list()
+hmc.ESS <- c()
+hmc.IF <- c()
+
+hmc.acf[[1]] <- autocorr(hmc.post_samples_phi_mcmc, lags = c(0, 1, 5, 10, 20, 50, 100), relative=F)
+hmc.acf[[2]] <- autocorr(hmc.post_samples_sigma_eta_mcmc, lags = c(0, 1, 5, 10, 20, 50, 100), relative=F)
+hmc.acf[[3]] <- autocorr(hmc.post_samples_sigma_eps_mcmc, lags = c(0, 1, 5, 10, 20, 50, 100), relative=F)
+
+hmc.ESS[1] <- effectiveSize(hmc.post_samples_phi_mcmc)
+hmc.ESS[2] <- effectiveSize(hmc.post_samples_sigma_eta_mcmc)
+hmc.ESS[3] <- effectiveSize(hmc.post_samples_sigma_eps_mcmc)
+
+hmc.IF[1] <- length(hmc.post_samples_phi_mcmc)/hmc.ESS[1]
+hmc.IF[2] <- length(hmc.post_samples_sigma_eta_mcmc)/hmc.ESS[2]
+hmc.IF[3] <- length(hmc.post_samples_sigma_eps_mcmc)/hmc.ESS[3]
+
+## Thinning
+thin_interval <- 2
+hmc.post_samples_phi_thin <- as.vector(window(hmc.post_samples_phi_mcmc, thin = thin_interval))
+hmc.sigma_eta_thin <- as.vector(window(hmc.post_samples_sigma_eta_mcmc, thin = thin_interval))
+hmc.sigma_eps_thin <- as.vector(window(hmc.post_samples_sigma_eps_mcmc, thin = thin_interval))
+
+
 param_names <- c("phi", "sigma_eta", "sigma_eps")
 param_dim <- length(param_names)
 rvgaw.df <- data.frame(phi = rvgaw.post_samples_phi, 
                        sigma_eta = rvgaw.post_samples_eta, 
                        sigma_eps = rvgaw.post_samples_eps)
 hmc.df <- data.frame(phi = hmc.post_samples_phi, 
-                     sigma_eta = hmc.post_samples_eta, 
-                     sigma_eps = hmc.post_samples_eps)
+                     sigma_eta = hmc.sigma_eta_thin, 
+                     sigma_eps = hmc.sigma_eps_thin)
 hmcw.df <- data.frame(phi = hmcw.post_samples_phi, 
                      sigma_eta = hmcw.post_samples_eta, 
                      sigma_eps = hmcw.post_samples_eps)
@@ -540,7 +568,7 @@ if (plot_trajectories) {
     xlab("Iterations") + ylab("Value")
   print(trajectory_plot)                                                      
 
-  png(paste0("./plots/trajectory_lgss", block_info, ".png"), width = 1500, height = 500)
+  png(paste0("./plots/trajectories_lgss", block_info, ".png"), width = 1500, height = 500)
   print(trajectory_plot)                                                      
   dev.off()
   # png("./plots/trajectory_lgss.png", width = 1500, height = 500)

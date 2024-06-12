@@ -70,7 +70,7 @@ burn_in <- 5000 # per chain
 n_chains <- 2
 
 ## Flags
-rerun_rvgaw <- F
+rerun_rvgaw <- T
 rerun_mcmcw <- F
 rerun_hmc <- F
 rerun_hmcw <- F
@@ -79,8 +79,6 @@ save_rvgaw_results <- F
 save_mcmcw_results <- F
 save_hmc_results <- F
 save_hmcw_results <- F
-
-save_plots <- T
 
 ## Result directory
 # result_directory <- paste0("./results/", prior_type, "/")
@@ -239,7 +237,7 @@ if (plot_prior) {
 
 S <- 1000L
 # nblocks <- 100
-blocksize <- 500
+blocksize <- 100
 n_indiv <- find_cutoff_freq(y, nsegs = 25, power_prop = 1/2)$cutoff_ind #100
 
 if (use_tempering) {
@@ -400,8 +398,7 @@ if (rerun_hmc) {
 # hmc.theta_sigma <- hmc.fit[,,2]
 
 hmc.post_samples_phi <- c(hmc_results$draws[,,1])#tanh(hmc.theta_phi)
-hmc.post_samples_sigma_eta <- (hmc_results$draws[,,2])#sqrt(exp(hmc.theta_sigma))
-
+hmc.post_samples_sigma_eta <- c(hmc_results$draws[,,2])#sqrt(exp(hmc.theta_sigma))
 
 ########################################################
 ##          HMC with the Whittle likelihood           ##
@@ -476,177 +473,3 @@ if (rerun_hmcw) {
 hmcw.post_samples_phi <- c(hmcw_results$draws[,,1])
 hmcw.post_samples_sigma_eta <- c(hmcw_results$draws[,,2])
 
-###########################
-
-## Trajectories
-if (plot_trajectories) {
-  mu_phi <- sapply(rvgaw_results$mu, function(x) x[1])
-  mu_sigma_eta <- sapply(rvgaw_results$mu, function(x) x[2])
-
-  if (transform == "arctanh") {
-    mu_phi <- tanh(mu_phi)
-  } else { # logit transform
-    mu_phi <- exp(mu_phi) / (1 + exp(mu_phi))
-  }
-  mu_sigma_eta <- sqrt(exp(mu_sigma_eta))
-
-  true_df <- data.frame(param = c("phi", "sigma[eta]"), 
-                        value = c(phi, sigma_eta))
-
-  trajectory_df <- data.frame(phi = mu_phi, sigma_eta = mu_sigma_eta)
-  names(trajectory_df) <- c("phi", "sigma[eta]")
-  trajectory_df$iter <- 1:nrow(trajectory_df)
-
-  trajectory_df_long <- trajectory_df %>% pivot_longer(cols = !iter, 
-                                                      names_to = "param", values_to = "value")
-  trajectory_plot <- trajectory_df_long %>% ggplot() + 
-    geom_line(aes(x = iter, y = value), linewidth = 1) +
-    facet_wrap(~param, scales = "free", labeller = label_parsed) +
-    geom_hline(data = true_df, aes(yintercept = value), linetype = "dashed", linewidth = 1.5) +
-    theme_bw() + theme(text = element_text(size = 28)) + 
-    xlab("Iterations") + ylab("Value")
-
-
-  png(paste0("plots/trajectories_sv_sim", block_info, ".png"), width = 1000, height = 500)
-  # par(mfrow = c(1, 2))
-  # if (transform == "arctanh") {
-  #   plot(tanh(mu_phi), type = "l", main = "Trajectory of phi")
-  # } else {
-  #   plot(1 / (1 + exp(-mu_phi)), type = "l", main = "Trajectory of phi")
-  # }
-  # abline(h = phi, lty = 2)
-  # plot(sqrt(exp(mu_eta)), type = "l", main = "Trajectory of sigma_eta")
-  # abline(h = sigma_eta, lty = 2)
-    print(trajectory_plot)                                                      
-
-  dev.off()
-}
-
-## Estimation of kappa
-mean_log_eps2 <- digamma(1/2) + log(2)
-log_kappa2 <- mean(log(y^2)) - mean_log_eps2
-kappa <- sqrt(exp(log_kappa2))
-
-########################################
-##          Posterior plots           ##
-########################################
-
-param_names <- c("phi", "sigma_eta")
-param_dim <- length(param_names)
-rvgaw.df <- data.frame(phi = rvgaw.post_samples_phi, 
-                       sigma_eta = rvgaw.post_samples_sigma_eta)
-hmc.df <- data.frame(phi = hmc.post_samples_phi, 
-                     sigma_eta = hmc.post_samples_sigma_eta)
-hmcw.df <- data.frame(phi = hmcw.post_samples_phi, 
-                      sigma_eta = hmcw.post_samples_sigma_eta)
-names(hmc.df) <- param_names
-names(hmcw.df) <- param_names
-
-
-true_vals.df <- data.frame(phi = phi, sigma_eta = sigma_eta)
-param_values <- c(phi, sigma_eta)
-
-plots <- list()
-
-for (p in 1:param_dim) {
-  
-  true_vals.df <- data.frame(name = param_names[p], val = param_values[p])
-  
-  plot <- ggplot(rvgaw.df, aes(x=.data[[param_names[p]]])) +
-    geom_density(col = "red", lwd = 1) +
-    geom_density(data = hmcw.df, col = "goldenrod", lwd = 1) +
-    geom_density(data = hmc.df, col = "deepskyblue", lwd = 1) +
-    geom_vline(data = true_vals.df, aes(xintercept=val),
-               color="black", linetype="dashed", linewidth=1) +
-    labs(x = vars) +
-    theme_bw() +
-    theme(axis.title = element_blank(), text = element_text(size = 24)) +
-    scale_x_continuous(breaks = scales::pretty_breaks(n = 4))
-  
-  plots[[p]] <- plot  
-}
-
-## Arrange bivariate plots in lower off-diagonals
-n_lower_tri <- (param_dim^2 - param_dim)/2 # number of lower triangular elements
-
-index_to_i_j_colwise_nodiag <- function(k, n) {
-  kp <- n * (n - 1) / 2 - k
-  p  <- floor((sqrt(1 + 8 * kp) - 1) / 2)
-  i  <- n - (kp - p * (p + 1) / 2)
-  j  <- n - 1 - p
-  c(i, j)
-}
-
-cov_plots <- list()
-for (ind in 1:n_lower_tri) {
-  mat_ind <- index_to_i_j_colwise_nodiag(ind, param_dim)
-  p <- mat_ind[1]
-  q <- mat_ind[2]
-  
-  param_df <- data.frame(x = param_values[q], y = param_values[p])
-  
-  cov_plot <- ggplot(rvgaw.df, aes(x = .data[[param_names[q]]], y = .data[[param_names[p]]])) +
-    stat_ellipse(col = "red", type = "norm", lwd = 1) +
-    stat_ellipse(data = hmcw.df, col = "goldenrod", type = "norm", lwd = 1) +
-    stat_ellipse(data = hmc.df, col = "deepskyblue", type = "norm", lwd = 1) +
-    geom_point(data = param_df, aes(x = x, y = y),
-               shape = 4, color = "black", size = 5) +
-    theme_bw() +
-    theme(axis.title = element_blank(), text = element_text(size = 24)) +                               # Assign pretty axis ticks
-    scale_x_continuous(breaks = scales::pretty_breaks(n = 3)) 
-  
-  cov_plots[[ind]] <- cov_plot
-}
-
-m <- matrix(NA, param_dim, param_dim)
-m[lower.tri(m, diag = F)] <- 1:n_lower_tri 
-gr <- grid.arrange(grobs = cov_plots, layout_matrix = m)
-gr2 <- gtable_add_cols(gr, unit(1, "null"), -1)
-gr3 <- gtable_add_grob(gr2, grobs = lapply(plots, ggplotGrob), t = 1:param_dim, l = 1:param_dim)
-
-grid.draw(gr3)
-
-# A list of text grobs - the labels
-vars <- list(textGrob(bquote(phi)), textGrob(bquote(sigma[eta])), textGrob(bquote(sigma[epsilon])))
-vars <- lapply(vars, editGrob, gp = gpar(col = "black", fontsize = 24))
-
-# m <- matrix(1:param_dim, 1, param_dim, byrow = T)
-# gr <- grid.arrange(grobs = plots, layout_matrix = m)
-# gp <- gtable_add_rows(gr, unit(1.5, "lines"), -1) #0 adds on the top
-# gtable_show_layout(gp)
-# 
-# gp <- gtable_add_grob(gp, vars[1:param_dim], t = 2, l = 1:3)
-
-# So that there is space for the labels,
-# add a row to the top of the gtable,
-# and a column to the left of the gtable.
-gp <- gtable_add_cols(gr3, unit(1.5, "lines"), 0)
-gp <- gtable_add_rows(gp, unit(1.5, "lines"), -1) #0 adds on the top
-
-gtable_show_layout(gp)
-
-# Add the label grobs.
-# The labels on the left should be rotated; hence the edit.
-# t and l refer to cells in the gtable layout.
-# gtable_show_layout(gp) shows the layout.
-gp <- gtable_add_grob(gp, lapply(vars[1:param_dim], editGrob, rot = 90), t = 1:param_dim, l = 1)
-gp <- gtable_add_grob(gp, vars[1:param_dim], t = param_dim+1, l = 2:(param_dim+1))
-
-grid.newpage()
-grid.draw(gp)
-
-if (save_plots) {
-  plot_file <- paste0("sv_sim_posterior", "_", n, temper_info, reorder_info, block_info,
-                      "_", transform, "_", date, ".png")
-  filepath = paste0("./plots/", plot_file)
-  png(filepath, width = 800, height = 600)
-  grid.draw(gp)
-  dev.off()
-}
-
-## Timing comparison
-rvgaw.time <- rvgaw_results$time_elapsed[3]
-hmcw.time <- sum(hmcw_results$time()$chains$total)
-hmc.time <- sum(hmc_results$time()$chains$total)
-print(data.frame(method = c("R-VGA", "HMCW", "HMC"),
-                 time = c(rvgaw.time, hmcw.time, hmc.time)))
