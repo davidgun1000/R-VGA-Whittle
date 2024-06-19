@@ -181,7 +181,7 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
     rvgaw.mu_vals[[i+1]] <- mu_temp
     
     if (i %% floor(n_updates+1/10) == 0) {
-      cat(floor(i/n_updates+1 * 100), "% complete \n")
+      cat(floor(i/n_updates * 100), "% complete \n")
     }
     
   }
@@ -189,7 +189,7 @@ run_rvgaw_multi_sv <- function(data, prior_mean, prior_var, S,
   
   ## Posterior samples
   rvgaw.post_var <- chol2inv(chol(rvgaw.prec[[n_updates+1]]))
-  
+ 
   rvgaw.post_samples <- rmvnorm(n_post_samples, rvgaw.mu_vals[[n_updates+1]], rvgaw.post_var) # these are samples of beta, log(sigma_a^2), log(sigma_e^2)
   
   ## Construct A and Sigma_eta from these posterior samples

@@ -82,7 +82,7 @@ construct_prior <- function(data, prior_type = "prior1",
     diag_var_Sigma <- c(0.5, 0.05, 0.05) #rep(0.5, m*(m-1)/2 + m)
   } else {
     # diag_var_Sigma <- rep(0.01, m)
-    diag_var_Sigma <- rep(0.5, m)
+    diag_var_Sigma <- rep(0.1, m)
   }
   
   ## now put the prior of Phi and L together so that

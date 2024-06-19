@@ -5,7 +5,7 @@ setwd("~/R-VGA-Whittle/04_Multi_SV_Sigma/")
 ## Flags
 # date <- "20230920" #"20230918" has 5D, "20230920" has 3D
 # date <- "20230918"
-date <- "20240227"
+date <- "20240613" #"20240227"
 regenerate_data <- F
 save_data <- F
 use_cholesky <- T # use lower Cholesky factor to parameterise Sigma_eta
@@ -18,7 +18,7 @@ plot_trace <- F
 plot_trajectories <- F
 save_plots <- F
 
-rerun_rvgaw <- T
+rerun_rvgaw <- F
 rerun_mcmcw <- F
 rerun_hmc <- F
 rerun_hmcw <- F
@@ -44,7 +44,7 @@ n_chains <- 2
 
 library(mvtnorm)
 library(astsa)
-library(stcos)
+# library(stcos)
 library(coda)
 library(Matrix)
 # library("expm")
@@ -134,7 +134,7 @@ if (regenerate_data) {
     saveRDS(multi_sv_data, file = paste0("./data/multi_sv_data_", d, "d_Tfin", Tfin, "_", date, ".rds"))
   }
 } else {
-  multi_sv_data <- readRDS(file = paste0("./data/multi_sv_data_", d, "d_Tfin", Tfin, "_", date, ".rds"))
+  multi_sv_data <- readRDS(file = paste0("./data/multi_sv_data_", d, "d_Tfin", Tfin, "_20240227.rds"))
 }
 
 X <- multi_sv_data$X
@@ -283,6 +283,11 @@ if (plot_prior_samples) {
     }
   }
   dev.off()
+
+  quantiles <- lapply(VAR1_prior_samples, quantile, probs = c(0.025, 0.975))
+
+browser()
+
 }
 
 if (prior_type == "minnesota") {
@@ -533,32 +538,32 @@ rvgaw.post_samples_Sigma_eta <- rvgaw_results$post_samples$Sigma_eta
 #############################
 ##   MCMC implementation   ##
 #############################
-print("Starting MCMC with Whittle likelihood...")
+# print("Starting MCMC with Whittle likelihood...")
 
-mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_results_Tfin", Tfin, 
-                         "_", date, prior_type, ".rds")
+# mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_results_Tfin", Tfin, 
+#                          "_", date, prior_type, ".rds")
 
-# n_post_samples <- 50000
-# burn_in <- 50000
-iters <- (n_post_samples + burn_in) * n_chains
+# # n_post_samples <- 50000
+# # burn_in <- 50000
+# iters <- (n_post_samples + burn_in) * n_chains
 
-if (rerun_mcmcw) {
-  mcmcw_results <- run_mcmc_multi_sv(data = Y, iters = iters, burn_in = burn_in, 
-                                     prior_mean = prior_mean, prior_var = prior_var,
-                                     adapt_proposal = T, use_whittle_likelihood = T,
-                                     use_cholesky = use_cholesky, transform = transform)
-  if (save_mcmcw_results) {
-    saveRDS(mcmcw_results, mcmcw_filepath)
-  }
-} else {
-  mcmcw_results <- readRDS(mcmcw_filepath)
-}
+# if (rerun_mcmcw) {
+#   mcmcw_results <- run_mcmc_multi_sv(data = Y, iters = iters, burn_in = burn_in, 
+#                                      prior_mean = prior_mean, prior_var = prior_var,
+#                                      adapt_proposal = T, use_whittle_likelihood = T,
+#                                      use_cholesky = use_cholesky, transform = transform)
+#   if (save_mcmcw_results) {
+#     saveRDS(mcmcw_results, mcmcw_filepath)
+#   }
+# } else {
+#   mcmcw_results <- readRDS(mcmcw_filepath)
+# }
 
-## Extract samples
-mcmcw.post_samples_Phi_og <- lapply(mcmcw_results$post_samples, function(x) x$Phi) #post_samples_theta[, 1]
-mcmcw.post_samples_Sigma_eta_og <- lapply(mcmcw_results$post_samples, function(x) x$Sigma_eta) #post_samples_theta[, 2]
-mcmcw.post_samples_Phi <- mcmcw.post_samples_Phi_og[-(1:burn_in)]
-mcmcw.post_samples_Sigma_eta <- mcmcw.post_samples_Sigma_eta_og[-(1:burn_in)]
+# ## Extract samples
+# mcmcw.post_samples_Phi_og <- lapply(mcmcw_results$post_samples, function(x) x$Phi) #post_samples_theta[, 1]
+# mcmcw.post_samples_Sigma_eta_og <- lapply(mcmcw_results$post_samples, function(x) x$Sigma_eta) #post_samples_theta[, 2]
+# mcmcw.post_samples_Phi <- mcmcw.post_samples_Phi_og[-(1:burn_in)]
+# mcmcw.post_samples_Sigma_eta <- mcmcw.post_samples_Sigma_eta_og[-(1:burn_in)]
 
 # par(mfrow = c(3,2))
 # coda::traceplot(mcmcw.post_samples_phi_11, main = "Trace plot for phi_11")
@@ -701,9 +706,9 @@ if (rerun_hmcw) {
                                 prior_mean_gamma = prior_mean[(d+1):param_dim], 
                                 diag_prior_var_gamma = diag(prior_var)[(d+1):param_dim],
                                 # diag_prior_var_gamma = rep(0.1, 3),
-                                transform = ifelse(transform == "arctanh", 1, 0),
-                                truePhi = Phi,
-                                trueSigma = Sigma_eta
+                                transform = ifelse(transform == "arctanh", 1, 0)
+                                # truePhi = Phi,
+                                # trueSigma = Sigma_eta
                                 )
   
   multi_sv_model_whittle <- cmdstan_model(
@@ -853,7 +858,7 @@ phi_indices <- diag(indmat) # indices of diagonal elements of Phi
 sigma_indices <- indmat[lower.tri(indmat, diag = T)] # lower triangular elements of Sigma_eta
 
 thin_interval <- 50
-rvgaw.post_samples <- matrix(NA, n_post_samples*n_chains, param_dim)
+rvgaw.post_samples <- matrix(NA, length(rvgaw.post_samples_Phi), param_dim)
 hmc.post_samples <- matrix(NA, n_post_samples*n_chains/thin_interval, param_dim)
 hmcw.post_samples <- matrix(NA, n_post_samples*n_chains, param_dim)
 

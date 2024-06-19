@@ -39,9 +39,9 @@ source("./source/find_cutoff_freq.R")
 ## Flags
 rerun_test <- F
 save_rvgaw_results <- F
-save_plots <- F
+save_plots <- T
 
-date <- "20240227"
+date <- "20240613" #"20240227"
 Tfin <- 5000
 d <- 2 ## time series dimension
 dataset <- "5" # "hmc_est"
@@ -89,15 +89,12 @@ if (reorder == "random") {
 
 ## Read data
 print("Reading saved data...")
-multi_sv_data <- readRDS(file = paste0("./data/multi_sv_data_", d, "d_Tfin", Tfin, "_", date, "_", dataset, ".rds"))
-
+ multi_sv_data <- readRDS(file = paste0("./data/multi_sv_data_", d, "d_Tfin", Tfin, "_20240227.rds"))
 X <- multi_sv_data$X
 Y <- multi_sv_data$Y
 Phi <- multi_sv_data$Phi
 Sigma_eta <- multi_sv_data$Sigma_eta
 Sigma_eps <- multi_sv_data$Sigma_eps
-
-browser()
 
 ## Prior
 prior <- construct_prior(data = Y, prior_type = prior_type, use_cholesky = use_cholesky)
@@ -131,9 +128,15 @@ n_indiv <- max(c1, c2)
 
 pdg_plot1 <- welch_output1$pdg_plot
 pdg_plot2 <- welch_output2$pdg_plot
-png("./plots/blocksize_test/bivariate_sv_pdg_plot.png", width = 2000, height = 500)
-grid.arrange(pdg_plot1, pdg_plot2, nrow = 1)
+png("./plots/blocksize_test/bivariate_sv_pdg_plot_1.png", width = 1000, height = 500)
+print(pdg_plot1)
 dev.off()
+
+png("./plots/blocksize_test/bivariate_sv_pdg_plot_2.png", width = 1000, height = 500)
+# grid.arrange(pdg_plot1, pdg_plot2, nrow = 1)
+print(pdg_plot2)
+dev.off()
+
 # n_indiv <- max(cutoffs) # maximum between all the time series
 # n_indiv <- 100
 blocksizes <- c(0, 10, 50, 100, 300, 500, 1000)

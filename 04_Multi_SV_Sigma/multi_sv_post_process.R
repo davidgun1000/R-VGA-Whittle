@@ -28,7 +28,7 @@ source("./source/construct_Sigma.R")
 # plot_trajectories <- T
 save_plots <- T
 
-date <- "20240227" # "20230918" #the 20230918 version has sigma_eta = sqrt(0.1)
+date <- "20240613" #"20240227" # "20230918" #the 20230918 version has sigma_eta = sqrt(0.1)
 use_cholesky <- T # use lower Cholesky factor to parameterise Sigma_eta
 transform <- "arctanh"
 prior_type <- "prior1"
@@ -54,7 +54,7 @@ d <- 2 # bivariate
 Tfin <- 5000
 # phi_string <- sub("(\\d+)\\.(\\d+)", "\\1\\2", toString(phi)) ## removes decimal point fron the number
 print("Reading saved data...")
-multi_sv_data <- readRDS(file = paste0("./data/multi_sv_data_", d, "d_Tfin", Tfin, "_", date, ".rds"))
+multi_sv_data <- readRDS(file = paste0("./data/multi_sv_data_", d, "d_Tfin", Tfin, "_20240227.rds"))
 
 X <- multi_sv_data$X
 Y <- multi_sv_data$Y
@@ -165,9 +165,13 @@ n_post_samples <- 10000
 n_chains <- 2
 thin_interval <- 50
 rvgaw.post_samples <- matrix(NA, n_post_samples*n_chains, param_dim)
-hmc.post_samples <- matrix(NA, n_post_samples*n_chains, param_dim)
-hmc_thin.post_samples <- matrix(NA, n_post_samples*n_chains/thin_interval, param_dim)
-hmcw.post_samples <- matrix(NA, n_post_samples*n_chains, param_dim)
+# hmc.post_samples <- matrix(NA, n_post_samples*n_chains, param_dim)
+# hmc_thin.post_samples <- matrix(NA, n_post_samples*n_chains/thin_interval, param_dim)
+# hmcw.post_samples <- matrix(NA, n_post_samples*n_chains, param_dim)
+hmc.post_samples <- matrix(NA, prod(dim(hmc.Phi)[1:2]), param_dim)
+hmc_thin.post_samples <- matrix(NA, prod(dim(hmc.Phi)[1:2])/thin_interval, param_dim)
+hmcw.post_samples <- matrix(NA, prod(dim(hmcw.Phi)[1:2]), param_dim)
+
 
 # Arrange posterior samples of Phi in a matrix
 for (k in 1:length(phi_indices)) {
@@ -252,10 +256,11 @@ for (p in 1:param_dim) {
     geom_vline(data = true_vals.df, aes(xintercept=val),
                color="black", linetype="dashed", linewidth=1) +
     labs(x = vars) +
-    xlim(x = xlims[[p]]) +
+    # xlim(x = xlims[[p]]) +
     theme_bw() +
-    theme(axis.title = element_blank(), text = element_text(size = 24))
-    # scale_x_continuous(breaks = scales::pretty_breaks(n = 3))
+    theme(axis.title = element_blank(), text = element_text(size = 24)) +
+    scale_x_continuous(limits = xlims[[p]], breaks = scales::pretty_breaks(n = 3)) + 
+    theme(plot.margin = margin(0.3, 0.3, 0.3, 0.3, "cm"))
   # theme(legend.position="bottom") + 
   # scale_color_manual(values = c('RVGA' = 'red', 'HMC' = 'blue'))
   
@@ -289,7 +294,8 @@ for (ind in 1:n_lower_tri) {
                shape = 4, color = "black", size = 4) +
     theme_bw() +
     theme(axis.title = element_blank(), text = element_text(size = 24)) +                               # Assign pretty axis ticks
-    scale_x_continuous(breaks = scales::pretty_breaks(n = 3)) 
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 3)) + 
+    theme(plot.margin = margin(0.35, 0.35, 0.35, 0.35, "cm"))
   
   cov_plots[[ind]] <- cov_plot
 }
@@ -318,8 +324,8 @@ vars <- lapply(vars, editGrob, gp = gpar(col = "black", fontsize = 24))
 # So that there is space for the labels,
 # add a row to the top of the gtable,
 # and a column to the left of the gtable.
-gp <- gtable_add_cols(gr3, unit(1.5, "lines"), 0)
-gp <- gtable_add_rows(gp, unit(1.5, "lines"), -1) #0 adds on the top
+gp <- gtable_add_cols(gr3, unit(2, "lines"), 0)
+gp <- gtable_add_rows(gp, unit(2, "lines"), -1) #0 adds on the top
 
 # gtable_show_layout(gp)
 
@@ -394,7 +400,8 @@ print(data.frame(method = c("R-VGA-Whittle", "HMC-Whittle", "HMC-exact"),
   true_vals.df <- data.frame(param = param_names, 
                             value = param_values)
 
-  
+  block_df <- data.frame(cutoff = n_indiv)
+
   mu_Phi <- lapply(rvgaw_results$mu, function(x) tanh(x[1:d]))
   mu_Sigma <- lapply(rvgaw_results$mu, construct_Sigma_eta, d = d)
   mu_Sigma_vec <- lapply(mu_Sigma, function(S) S[lower.tri(S, diag = T)])
@@ -413,6 +420,7 @@ print(data.frame(method = c("R-VGA-Whittle", "HMC-Whittle", "HMC-exact"),
         geom_line(aes(x = iter, y = value), linewidth = 1) +
         facet_wrap(~param, scales = "free", labeller = label_parsed) +
         geom_hline(data = true_vals.df, aes(yintercept = value), linetype = "dashed", linewidth = 1.5) +
+        geom_vline(data = block_df, aes(xintercept = cutoff), linetype = "dotted", linewidth = 1.5) +
         theme_bw() +
         theme(text = element_text(size = 28)) +
         xlab("Iterations") +

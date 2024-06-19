@@ -60,12 +60,12 @@ if (length(gpus) > 0) {
 }
 
 ## Flags
-date <- "20240115" #"20230918"
+date <- "20240613" #"20240115" #"20230918"
 use_cholesky <- T # use lower Cholesky factor to parameterise Sigma_eta
 # prior_type <- "minnesota"
 use_heaps_mapping <- F
 plot_likelihood_surface <- F
-plot_prior_samples <- T
+plot_prior_samples <- F
 plot_trajectories <- F
 plot_trace <- F
 transform <- "arctanh"
@@ -73,12 +73,12 @@ prior_type <- "prior1"
 currencies <- c("GBP", "USD")
 # reread_data <- F
 
-rerun_rvgaw <- F
+rerun_rvgaw <- T
 rerun_mcmcw <- F
 rerun_hmc <- F
 rerun_hmcw <- F
 
-save_rvgaw_results <- F
+save_rvgaw_results <- T
 save_mcmcw_results <- F
 save_hmc_results <- F
 save_hmcw_results <- F
@@ -95,7 +95,7 @@ use_median <- F
 
 ## HMC flags
 n_post_samples <- 10000
-burn_in <- 5000
+burn_in <- 5000 
 n_chains <- 2
 
 #########################
@@ -244,7 +244,8 @@ if (plot_prior_samples) {
     }
   }
   
-  # browser()
+  quantiles <- lapply(VAR1_prior_samples, quantile, probs = c(0.025, 0.975))
+  browser()
 }
 
 ## Plot likelihood surface here
@@ -425,6 +426,7 @@ rvgaw_filepath <- paste0(result_directory, "rvga_whittle_forex",
 
 if (rerun_rvgaw) {
   rvgaw_results <- run_rvgaw_multi_sv(data = Y_demeaned, prior_mean = prior_mean, 
+                                      n_post_samples = n_post_samples*n_chains,
                                       prior_var = prior_var, S = S,
                                       use_cholesky = use_cholesky,
                                       use_tempering = use_tempering, 
@@ -472,35 +474,35 @@ rvgaw.post_samples_Sigma_eta <- rvgaw_results$post_samples$Sigma_eta
 # 
 # plot(density(rvgaw.post_samples_sigma_eta_22), col = "royalblue", main = "sigma_eta_22")
 
-#############################
-##   MCMC implementation   ##
-#############################
-print("Starting MCMC with Whittle likelihood...")
+# #############################
+# ##   MCMC implementation   ##
+# #############################
+# print("Starting MCMC with Whittle likelihood...")
 
-mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_forex", 
-                         "_", date, ".rds")
+# mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_forex", 
+#                          "_", date, ".rds")
 
-# n_post_samples <- 10000
-# burn_in <- 10000
-# n_chains <- 2
-iters <- (n_post_samples + burn_in) * n_chains
+# # n_post_samples <- 10000
+# # burn_in <- 10000
+# # n_chains <- 2
+# iters <- (n_post_samples + burn_in) * n_chains
 
-if (rerun_mcmcw) {
-  mcmcw_results <- run_mcmc_multi_sv(data = Y_demeaned, iters = iters, burn_in = burn_in, 
-                                     prior_mean = prior_mean, prior_var = prior_var,
-                                     adapt_proposal = T, use_whittle_likelihood = T,
-                                     use_cholesky = use_cholesky,
-                                     transform = transform)
-  if (save_mcmcw_results) {
-    saveRDS(mcmcw_results, mcmcw_filepath)
-  }
-} else {
-  mcmcw_results <- readRDS(mcmcw_filepath)
-}
+# if (rerun_mcmcw) {
+#   mcmcw_results <- run_mcmc_multi_sv(data = Y_demeaned, iters = iters, burn_in = burn_in, 
+#                                      prior_mean = prior_mean, prior_var = prior_var,
+#                                      adapt_proposal = T, use_whittle_likelihood = T,
+#                                      use_cholesky = use_cholesky,
+#                                      transform = transform)
+#   if (save_mcmcw_results) {
+#     saveRDS(mcmcw_results, mcmcw_filepath)
+#   }
+# } else {
+#   mcmcw_results <- readRDS(mcmcw_filepath)
+# }
 
-## Extract samples
-mcmcw.post_samples_Phi <- lapply(mcmcw_results$post_samples, function(x) x$Phi) #post_samples_theta[, 1]
-mcmcw.post_samples_Sigma_eta <- lapply(mcmcw_results$post_samples, function(x) x$Sigma_eta) #post_samples_theta[, 2]
+# ## Extract samples
+# mcmcw.post_samples_Phi <- lapply(mcmcw_results$post_samples, function(x) x$Phi) #post_samples_theta[, 1]
+# mcmcw.post_samples_Sigma_eta <- lapply(mcmcw_results$post_samples, function(x) x$Sigma_eta) #post_samples_theta[, 2]
 
 # mcmcw.post_samples_phi_11 <- lapply(mcmcw.post_samples_phi, function(x) x[1,1])
 # mcmcw.post_samples_phi_12 <- lapply(mcmcw.post_samples_phi, function(x) x[1,2])
@@ -542,6 +544,7 @@ print("Starting HMC...")
 hmc_filepath <- paste0(result_directory, "hmc_forex", 
                       "_", paste(currencies, collapse = "_"), 
                        "_", date, ".rds")
+                      #  "_20240115.rds")
 
 
 if (rerun_hmc) {
@@ -832,28 +835,84 @@ hmcw.post_samples_Sigma_eta <- hmcw_results$draws[,,(d^2+1):(2*d^2)]
 #   
 # }
 
-# ## ggplot version
-# param_names <- c("phi11", "phi22", "sigma_eta11", "sigma_eta21", "sigma_eta22")
-# param_dim <- length(param_names)
+## ggplot version
+param_names <- c("phi11", "phi22", "sigma_eta11", "sigma_eta21", "sigma_eta22")
+param_dim <- length(param_names)
 
-# ind_df <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d)) # (i,j) indices of elements in a dxd matrix
+ind_df <- data.frame(i = rep(1:d, each = d), j = rep(1:d, d)) # (i,j) indices of elements in a dxd matrix
 
-# indmat <- matrix(1:d^2, d, d, byrow = T) # number matrix elements by row
-# phi_indices <- diag(indmat) # indices of diagonal elements of Phi
-# sigma_indices <- indmat[lower.tri(indmat, diag = T)] # lower triangular elements of Sigma_eta
+indmat <- matrix(1:d^2, d, d, byrow = T) # number matrix elements by row
+phi_indices <- diag(indmat) # indices of diagonal elements of Phi
+sigma_indices <- indmat[lower.tri(indmat, diag = T)] # lower triangular elements of Sigma_eta
 
-# thin_interval <- 50
-# rvgaw.post_samples <- matrix(NA, n_post_samples*n_chains, param_dim)
-# hmc.post_samples <- matrix(NA, n_post_samples*n_chains/thin_interval, param_dim)
-# hmcw.post_samples <- matrix(NA, n_post_samples*n_chains, param_dim)
+thin_interval <- 50
+rvgaw.post_samples <- matrix(NA, length(rvgaw.post_samples_Phi), param_dim)
+hmc.post_samples <- matrix(NA, n_post_samples*n_chains/thin_interval, param_dim)
+hmcw.post_samples <- matrix(NA, n_post_samples*n_chains, param_dim)
 
-# hmc.ESS <- c()
-# hmc.IF <- c()
-# hmc.acf <- list()
+hmc.ESS <- c()
+hmc.IF <- c()
+hmc.acf <- list()
 
-# hmcw.ESS <- c()
-# hmcw.IF <- c()
-# hmcw.acf <- list()
+hmcw.ESS <- c()
+hmcw.IF <- c()
+hmcw.acf <- list()
+
+# Arrange posterior samples of Phi in a matrix
+for (k in 1:length(phi_indices)) {
+  r <- phi_indices[k]
+  i <- as.numeric(ind_df[r, ][1])
+  j <- as.numeric(ind_df[r, ][2])
+  rvgaw.post_samples[, k] <- sapply(rvgaw.post_samples_Phi, function(x) x[i,j])
+
+  hmc_samples <- mcmc(c(hmc.post_samples_Phi[,,r]))
+  hmcw_samples <- mcmc(c(hmcw.post_samples_Phi[,,r]))
+
+  ## ACF
+  hmc.acf[[k]] <- autocorr(hmc_samples, lags = c(0, 1, 5, 10, 20, 50, 100), relative=F)
+  hmcw.acf[[k]] <- autocorr(hmcw_samples, lags = c(0, 1, 5, 10, 20, 50, 100), relative=F)
+
+  ## Effective Sample Size
+  hmc.ESS[k] <- coda::effectiveSize(hmc_samples)
+  hmcw.ESS[k] <- coda::effectiveSize(hmcw_samples)
+    
+  # Compute Inefficiency factor
+  hmc.IF[k] <- length(hmc_samples)/hmc.ESS[k]
+  hmcw.IF[k] <- length(hmcw_samples)/hmcw.ESS[k]
+
+  ## Thin samples
+  
+  hmc.post_samples[, k] <- as.vector(window(hmc_samples, thin = thin_interval))
+  hmcw.post_samples[, k] <- as.vector(window(hmcw_samples, thin = 1))
+}
+
+# Arrange posterior samples of Sigma_eta in a matrix
+for (k in 1:length(sigma_indices)) {
+  r <- sigma_indices[k]
+  i <- as.numeric(ind_df[r, ][1])
+  j <- as.numeric(ind_df[r, ][2])
+  rvgaw.post_samples[, k+d] <- sapply(rvgaw.post_samples_Sigma_eta, function(x) x[i,j])
+
+  hmc_samples <- mcmc(c(hmc.post_samples_Sigma_eta[,,r]))
+  hmcw_samples <- mcmc(c(hmcw.post_samples_Sigma_eta[,,r]))
+
+  ## ACF
+  hmc.acf[[k+d]] <- autocorr(hmc_samples, lags = c(0, 1, 5, 10, 20, 50), relative=F)
+  hmcw.acf[[k+d]] <- autocorr(hmcw_samples, lags = c(0, 1, 5, 10, 20, 50), relative=F)
+
+  ## Effective Sample Size
+  hmc.ESS[k+d] <- coda::effectiveSize(hmc_samples)
+  hmcw.ESS[k+d] <- coda::effectiveSize(hmcw_samples)
+    
+  ## Compute Inefficiency factor
+  hmc.IF[k+d] <- length(hmc_samples)/hmc.ESS[k+d^2]
+  hmcw.IF[k+d] <- length(hmcw_samples)/hmcw.ESS[k+d^2]
+
+  ## Thin samples
+  hmc.post_samples[, k+d] <- as.vector(window(hmc_samples, thin = thin_interval))
+  hmcw.post_samples[, k+d] <- as.vector(window(hmcw_samples, thin = 1))
+}
+
 
 # # Arrange posterior samples of Phi in a matrix
 # for (k in 1:length(phi_indices)) {
@@ -861,26 +920,8 @@ hmcw.post_samples_Sigma_eta <- hmcw_results$draws[,,(d^2+1):(2*d^2)]
 #   i <- as.numeric(ind_df[r, ][1])
 #   j <- as.numeric(ind_df[r, ][2])
 #   rvgaw.post_samples[, k] <- sapply(rvgaw.post_samples_Phi, function(x) x[i,j])
-
-#   hmc_samples <- mcmc(c(hmc.post_samples_Phi[,,r]))
-#   hmcw_samples <- mcmc(c(hmcw.post_samples_Phi[,,r]))
-
-#   ## ACF
-#   hmc.acf[[k]] <- autocorr(hmc_samples, lags = c(0, 1, 5, 10, 20, 50, 100), relative=F)
-#   hmcw.acf[[k]] <- autocorr(hmcw_samples, lags = c(0, 1, 5, 10, 20, 50, 100), relative=F)
-
-#   ## Effective Sample Size
-#   hmc.ESS[k] <- coda::effectiveSize(hmc_samples)
-#   hmcw.ESS[k] <- coda::effectiveSize(hmcw_samples)
-    
-#   # Compute Inefficiency factor
-#   hmc.IF[k] <- length(hmc_samples)/hmc.ESS[k]
-#   hmcw.IF[k] <- length(hmcw_samples)/hmcw.ESS[k]
-
-#   ## Thin samples
-  
-#   hmc.post_samples[, k] <- as.vector(window(hmc_samples, thin = thin_interval))
-#   hmcw.post_samples[, k] <- as.vector(window(hmcw_samples, thin = 1))
+#   hmc.post_samples[, k] <- c(hmc.post_samples_Phi[,,r])
+#   hmcw.post_samples[, k] <- c(hmcw.post_samples_Phi[,,r])
 # }
 
 # # Arrange posterior samples of Sigma_eta in a matrix
@@ -889,161 +930,123 @@ hmcw.post_samples_Sigma_eta <- hmcw_results$draws[,,(d^2+1):(2*d^2)]
 #   i <- as.numeric(ind_df[r, ][1])
 #   j <- as.numeric(ind_df[r, ][2])
 #   rvgaw.post_samples[, k+d] <- sapply(rvgaw.post_samples_Sigma_eta, function(x) x[i,j])
-
-#   hmc_samples <- mcmc(c(hmc.post_samples_Sigma_eta[,,r]))
-#   hmcw_samples <- mcmc(c(hmcw.post_samples_Sigma_eta[,,r]))
-
-#   ## ACF
-#   hmc.acf[[k+d]] <- autocorr(hmc_samples, lags = c(0, 1, 5, 10, 20, 50), relative=F)
-#   hmcw.acf[[k+d]] <- autocorr(hmcw_samples, lags = c(0, 1, 5, 10, 20, 50), relative=F)
-
-#   ## Effective Sample Size
-#   hmc.ESS[k+d] <- coda::effectiveSize(hmc_samples)
-#   hmcw.ESS[k+d] <- coda::effectiveSize(hmcw_samples)
-    
-#   ## Compute Inefficiency factor
-#   hmc.IF[k+d] <- length(hmc_samples)/hmc.ESS[k+d^2]
-#   hmcw.IF[k+d] <- length(hmcw_samples)/hmcw.ESS[k+d^2]
-
-#   ## Thin samples
-#   hmc.post_samples[, k+d] <- as.vector(window(hmc_samples, thin = thin_interval))
-#   hmcw.post_samples[, k+d] <- as.vector(window(hmcw_samples, thin = 1))
+#   hmc.post_samples[, k+d] <- c(hmc.post_samples_Sigma_eta[,,r])
+#   hmcw.post_samples[, k+d] <- c(hmcw.post_samples_Sigma_eta[,,r])
 # }
 
+throwaway <- 0 #15000
 
-# # # Arrange posterior samples of Phi in a matrix
-# # for (k in 1:length(phi_indices)) {
-# #   r <- phi_indices[k]
-# #   i <- as.numeric(ind_df[r, ][1])
-# #   j <- as.numeric(ind_df[r, ][2])
-# #   rvgaw.post_samples[, k] <- sapply(rvgaw.post_samples_Phi, function(x) x[i,j])
-# #   hmc.post_samples[, k] <- c(hmc.post_samples_Phi[,,r])
-# #   hmcw.post_samples[, k] <- c(hmcw.post_samples_Phi[,,r])
-# # }
+rvgaw.df <- as.data.frame(rvgaw.post_samples[-(1:throwaway),])
+hmc.df <- as.data.frame(hmc.post_samples[-(1:throwaway),])
+hmcw.df <- as.data.frame(hmcw.post_samples[-(1:throwaway),])
+names(rvgaw.df) <- param_names
+names(hmc.df) <- param_names
+names(hmcw.df) <- param_names
 
-# # # Arrange posterior samples of Sigma_eta in a matrix
-# # for (k in 1:length(sigma_indices)) {
-# #   r <- sigma_indices[k]
-# #   i <- as.numeric(ind_df[r, ][1])
-# #   j <- as.numeric(ind_df[r, ][2])
-# #   rvgaw.post_samples[, k+d] <- sapply(rvgaw.post_samples_Sigma_eta, function(x) x[i,j])
-# #   hmc.post_samples[, k+d] <- c(hmc.post_samples_Sigma_eta[,,r])
-# #   hmcw.post_samples[, k+d] <- c(hmcw.post_samples_Sigma_eta[,,r])
-# # }
+## ggplot version
 
-# throwaway <- 0 #15000
+plots <- list()
+xlims <- list(c(0.985, 1), c(0.985, 1), c(0, 0.02), c(0, 0.02), c(0, 0.02))
 
-# rvgaw.df <- as.data.frame(rvgaw.post_samples[-(1:throwaway),])
-# hmc.df <- as.data.frame(hmc.post_samples[-(1:throwaway),])
-# hmcw.df <- as.data.frame(hmcw.post_samples[-(1:throwaway),])
-# names(rvgaw.df) <- param_names
-# names(hmc.df) <- param_names
-# names(hmcw.df) <- param_names
-
-# ## ggplot version
-
-# plots <- list()
-# xlims <- list(c(0.985, 1), c(0.985, 1), c(0, 0.02), c(0, 0.02), c(0, 0.02))
-
-# for (p in 1:param_dim) {
+for (p in 1:param_dim) {
   
-#   plot <- ggplot(rvgaw.df, aes(x=.data[[param_names[p]]])) +
-#     # plot <- ggplot(exact_rvgal.df, aes(x=colnames(exact_rvgal.df)[p])) + 
-#     geom_density(col = "red", lwd = 1) +
-#     geom_density(data = hmcw.df, col = "goldenrod", lwd = 1) +
-#     geom_density(data = hmc.df, col = "deepskyblue", lwd = 1) +
-#     labs(x = vars) +
-#     xlim(x = xlims[[p]]) + 
-#     theme_bw() +
-#     theme(axis.title = element_blank(), text = element_text(size = 24)) #+
-#     # scale_x_continuous(breaks = scales::pretty_breaks(n = 3))
-#   # theme(legend.position="bottom") + 
-#   # scale_color_manual(values = c('RVGA' = 'red', 'HMC' = 'blue'))
+  plot <- ggplot(rvgaw.df, aes(x=.data[[param_names[p]]])) +
+    # plot <- ggplot(exact_rvgal.df, aes(x=colnames(exact_rvgal.df)[p])) + 
+    geom_density(col = "red", lwd = 1) +
+    geom_density(data = hmcw.df, col = "goldenrod", lwd = 1) +
+    geom_density(data = hmc.df, col = "deepskyblue", lwd = 1) +
+    labs(x = vars) +
+    xlim(x = xlims[[p]]) + 
+    theme_bw() +
+    theme(axis.title = element_blank(), text = element_text(size = 24)) #+
+    # scale_x_continuous(breaks = scales::pretty_breaks(n = 3))
+  # theme(legend.position="bottom") + 
+  # scale_color_manual(values = c('RVGA' = 'red', 'HMC' = 'blue'))
   
-#   plots[[p]] <- plot  
-# }
+  plots[[p]] <- plot  
+}
 
-# ## Arrange bivariate plots in lower off-diagonals
-# n_lower_tri <- (param_dim^2 - param_dim)/2 # number of lower triangular elements
+## Arrange bivariate plots in lower off-diagonals
+n_lower_tri <- (param_dim^2 - param_dim)/2 # number of lower triangular elements
 
-# index_to_i_j_colwise_nodiag <- function(k, n) {
-#   kp <- n * (n - 1) / 2 - k
-#   p  <- floor((sqrt(1 + 8 * kp) - 1) / 2)
-#   i  <- n - (kp - p * (p + 1) / 2)
-#   j  <- n - 1 - p
-#   c(i, j)
-# }
+index_to_i_j_colwise_nodiag <- function(k, n) {
+  kp <- n * (n - 1) / 2 - k
+  p  <- floor((sqrt(1 + 8 * kp) - 1) / 2)
+  i  <- n - (kp - p * (p + 1) / 2)
+  j  <- n - 1 - p
+  c(i, j)
+}
 
-# cov_plots <- list()
-# for (ind in 1:n_lower_tri) {
-#   mat_ind <- index_to_i_j_colwise_nodiag(ind, param_dim)
-#   p <- mat_ind[1]
-#   q <- mat_ind[2]
+cov_plots <- list()
+for (ind in 1:n_lower_tri) {
+  mat_ind <- index_to_i_j_colwise_nodiag(ind, param_dim)
+  p <- mat_ind[1]
+  q <- mat_ind[2]
   
-#   cov_plot <- ggplot(rvgaw.df, aes(x = .data[[param_names[q]]], y = .data[[param_names[p]]])) +
-#     stat_ellipse(col = "red", type = "norm", lwd = 1) +
-#     stat_ellipse(data = hmcw.df, col = "goldenrod", type = "norm", lwd = 1) +
-#     stat_ellipse(data = hmc.df, col = "deepskyblue", type = "norm", lwd = 1) +
-#     theme_bw() +
-#     theme(axis.title = element_blank(), text = element_text(size = 24)) +                               # Assign pretty axis ticks
-#     scale_x_continuous(breaks = scales::pretty_breaks(n = 3)) 
+  cov_plot <- ggplot(rvgaw.df, aes(x = .data[[param_names[q]]], y = .data[[param_names[p]]])) +
+    stat_ellipse(col = "red", type = "norm", lwd = 1) +
+    stat_ellipse(data = hmcw.df, col = "goldenrod", type = "norm", lwd = 1) +
+    stat_ellipse(data = hmc.df, col = "deepskyblue", type = "norm", lwd = 1) +
+    theme_bw() +
+    theme(axis.title = element_blank(), text = element_text(size = 24)) +                               # Assign pretty axis ticks
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 3)) 
   
-#   cov_plots[[ind]] <- cov_plot
-# }
+  cov_plots[[ind]] <- cov_plot
+}
 
-# m <- matrix(NA, param_dim, param_dim)
-# m[lower.tri(m, diag = F)] <- 1:n_lower_tri 
-# gr <- grid.arrange(grobs = cov_plots, layout_matrix = m)
-# gr2 <- gtable_add_cols(gr, unit(1, "null"), -1)
-# gr3 <- gtable_add_grob(gr2, grobs = lapply(plots, ggplotGrob), t = 1:param_dim, l = 1:param_dim)
+m <- matrix(NA, param_dim, param_dim)
+m[lower.tri(m, diag = F)] <- 1:n_lower_tri 
+gr <- grid.arrange(grobs = cov_plots, layout_matrix = m)
+gr2 <- gtable_add_cols(gr, unit(1, "null"), -1)
+gr3 <- gtable_add_grob(gr2, grobs = lapply(plots, ggplotGrob), t = 1:param_dim, l = 1:param_dim)
 
-# # grid.draw(gr3)
+# grid.draw(gr3)
 
-# # A list of text grobs - the labels
-# vars <- list(textGrob(bquote(Phi[11])), textGrob(bquote(Phi[22])),
-#              textGrob(bquote(Sigma[eta[11]])), textGrob(bquote(Sigma[eta[21]])),
-#              textGrob(bquote(Sigma[eta[21]])))
-# vars <- lapply(vars, editGrob, gp = gpar(col = "black", fontsize = 24))
+# A list of text grobs - the labels
+vars <- list(textGrob(bquote(Phi[11])), textGrob(bquote(Phi[22])),
+             textGrob(bquote(Sigma[eta[11]])), textGrob(bquote(Sigma[eta[21]])),
+             textGrob(bquote(Sigma[eta[21]])))
+vars <- lapply(vars, editGrob, gp = gpar(col = "black", fontsize = 24))
 
-# # m <- matrix(1:param_dim, 1, param_dim, byrow = T)
-# # gr <- grid.arrange(grobs = plots, layout_matrix = m)
-# # gp <- gtable_add_rows(gr, unit(1.5, "lines"), -1) #0 adds on the top
-# # gtable_show_layout(gp)
-# # 
-# # gp <- gtable_add_grob(gp, vars[1:param_dim], t = 2, l = 1:3)
+# m <- matrix(1:param_dim, 1, param_dim, byrow = T)
+# gr <- grid.arrange(grobs = plots, layout_matrix = m)
+# gp <- gtable_add_rows(gr, unit(1.5, "lines"), -1) #0 adds on the top
+# gtable_show_layout(gp)
+# 
+# gp <- gtable_add_grob(gp, vars[1:param_dim], t = 2, l = 1:3)
 
-# # So that there is space for the labels,
-# # add a row to the top of the gtable,
-# # and a column to the left of the gtable.
-# gp <- gtable_add_cols(gr3, unit(2, "lines"), 0)
-# gp <- gtable_add_rows(gp, unit(2, "lines"), -1) #0 adds on the top
+# So that there is space for the labels,
+# add a row to the top of the gtable,
+# and a column to the left of the gtable.
+gp <- gtable_add_cols(gr3, unit(2, "lines"), 0)
+gp <- gtable_add_rows(gp, unit(2, "lines"), -1) #0 adds on the top
 
-# # gtable_show_layout(gp)
+# gtable_show_layout(gp)
 
-# # Add the label grobs.
-# # The labels on the left should be rotated; hence the edit.
-# # t and l refer to cells in the gtable layout.
-# # gtable_show_layout(gp) shows the layout.
-# gp <- gtable_add_grob(gp, lapply(vars[1:param_dim], editGrob, rot = 90), t = 1:param_dim, l = 1)
-# gp <- gtable_add_grob(gp, vars[1:param_dim], t = param_dim+1, l = 2:(param_dim+1))
+# Add the label grobs.
+# The labels on the left should be rotated; hence the edit.
+# t and l refer to cells in the gtable layout.
+# gtable_show_layout(gp) shows the layout.
+gp <- gtable_add_grob(gp, lapply(vars[1:param_dim], editGrob, rot = 90), t = 1:param_dim, l = 1)
+gp <- gtable_add_grob(gp, vars[1:param_dim], t = param_dim+1, l = 2:(param_dim+1))
 
-# grid.newpage()
-# grid.draw(gp)
+grid.newpage()
+grid.draw(gp)
 
-# if (save_plots) {
-#   plot_file <- paste0("multi_sv_real_posterior_", 
-#                       paste(currencies, collapse = "_"),
-#                       temper_info, reorder_info, block_info,
-#                       "_", transform, "_thinned_", date, ".png")
-#   filepath = paste0("./plots/", plot_file)
-#   png(filepath, width = 1200, height = 900)
-#   grid.draw(gp)
-#   dev.off()
-# }
+if (save_plots) {
+  plot_file <- paste0("test_multi_sv_real_posterior_", 
+                      paste(currencies, collapse = "_"),
+                      temper_info, reorder_info, block_info,
+                      "_", transform, "_thinned_", date, ".png")
+  filepath = paste0("./plots/", plot_file)
+  png(filepath, width = 1200, height = 900)
+  grid.draw(gp)
+  dev.off()
+}
 
-# ## Timings
-# # rvgaw.time <- rvgaw_results$time_elapsed[3]
-# # hmcw.time <- sum(hmcw_results$time()$chains$total)
-# # hmc.time <- sum(hmc_results$time()$chains$total)
-# # print(data.frame(method = c("R-VGA", "HMCW", "HMC"),
-# #                  time = c(rvgaw.time, hmcw.time, hmc.time)))
+## Timings
+# rvgaw.time <- rvgaw_results$time_elapsed[3]
+# hmcw.time <- sum(hmcw_results$time()$chains$total)
+# hmc.time <- sum(hmc_results$time()$chains$total)
+# print(data.frame(method = c("R-VGA", "HMCW", "HMC"),
+#                  time = c(rvgaw.time, hmcw.time, hmc.time)))
