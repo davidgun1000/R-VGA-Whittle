@@ -8,7 +8,7 @@ This folder contains R code for the 5 examples in the R-VGA-Whittle manuscript:
 5. the bivariate SV model applied to exchange rate data.
 
 ## Folder structure
-Each example is stored in one folder, which contains a `*_main.R' file for running the R-VGA-Whittle, HMC-Whittle and HMC-exact algorithms on the example being considered, and a `*_post_process.R' file for processing the results and generating the posterior density plots. To reproduce the results in the manuscript, run the `*_post_process.R' file.
+Each example is stored in one folder, which contains a `*_main.R` file for running the R-VGA-Whittle, HMC-Whittle and HMC-exact algorithms on the example being considered, and a `*_post_process.R` file for processing the results and generating the posterior density plots. To reproduce the results in the manuscript, run the `*_post_process.R` file.
 
 Each folder contains separate sub-folders:
 1. `source`, which contains associated R scripts needed for running R-VGA-Whittle, HMC-Whittle and HMC-exact algorithms on the model considered,
