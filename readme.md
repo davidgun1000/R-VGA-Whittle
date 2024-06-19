@@ -23,7 +23,7 @@ Results from other examples can be similarly reproduced by running the `*_main.R
 
 Results from Section S3 of the online supplement can be reproduced by running the `compare_blocksizes.R` file. The flag `rerun_test` is set to `FALSE` by default, so that pre-saved results will be loaded directly from the `results\var_test` sub-folder. Setting this flag to `TRUE` will re-run the R-VGA-Whittle algorithm for the block sizes specified in the `blocksizes` vector (which defaults to 0, 10, 50, 100, 300, 500, and 1000, where 0 denotes no block updating).
 
-Results from Section S4 of the online supplement can be reproduced by running the `var_test_*.R` file. The flag `rerun_rvgaw` is set to `FALSE` by default, so that pre-saved results will be loaded directly from the `var_test' sub-folder. Setting this flag to `TRUE` will re-run the R-VGA-Whittle algorithm 10 times for the Monte Carlo sample size specified in the parameter `S` (set to 1000 by default). 
+Results from Section S4 of the online supplement can be reproduced by running the `var_test_*.R` file. The flag `rerun_rvgaw` is set to `FALSE` by default, so that pre-saved results will be loaded directly from the `var_test` sub-folder. Setting this flag to `TRUE` will re-run the R-VGA-Whittle algorithm 10 times for the Monte Carlo sample size specified in the parameter `S` (set to 1000 by default). 
 
 The RStudio version and R packages required to run the code, along with installation instructions for these packages, can be found in the next section. 
 
