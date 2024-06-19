@@ -70,7 +70,7 @@ burn_in <- 5000 # per chain
 n_chains <- 2
 
 ## Flags
-rerun_rvgaw <- T
+rerun_rvgaw <- F
 rerun_mcmcw <- F
 rerun_hmc <- F
 rerun_hmcw <- F
@@ -130,6 +130,7 @@ x <- sv_data$x
 phi <- sv_data$phi
 sigma_eta <- sv_data$sigma_eta
 sigma_eps <- sv_data$sigma_eps
+
 
 ## Test likelihood computation
 if (plot_likelihood_surface) {

@@ -5,14 +5,7 @@ rm(list = ls())
 
 library(mvtnorm)
 library(coda)
-# library(Deriv)
-# library(cmdstanr)
-# library(tensorflow)
-# reticulate::use_condaenv("myenv", required = TRUE)
-# library(keras)
-# library(stats)
-# library(bspec)
-# library(tidyr)
+library(tidyr)
 library(dplyr)
 library(ggplot2)
 library(grid)
@@ -24,13 +17,10 @@ source("./source/find_cutoff_freq.R")
 
 
 ## Flags
-date <- "20230918" # "20230918" #the 20230918 version has sigma_eta = sqrt(0.1)
+date <- "20230918" 
 currency <- "JPY"
-# date <- "20230918"
 
 ## R-VGA flags
-# regenerate_data <- F
-# save_data <- F
 use_tempering <- T
 temper_first <- T
 reorder <- 0 # "decreasing" # or decreasing # or a number
@@ -40,18 +30,12 @@ plot_likelihood_surface <- F
 prior_type <- ""
 transform <- "arctanh"
 plot_trajectories <- T
-save_plots <- T
-
-# n_post_samples <- 10000 # per chain
-# burn_in <- 5000 # per chain
-# n_chains <- 2
+save_plots <- F
 
 ## Read data
 print("Reading saved data...")
 load("./data/exrates.RData")
 
-# currencies <- c("AUD", "NZD", "USD", "JPY", "CAD")
-# data <- dat[, currencies]
 nrows <- nrow(dat)
 
 # Compute log returns
@@ -61,7 +45,6 @@ exrates <- log_data[-1, ] # get rid of 1st row
 y <- exrates[, currency]
 y <- y - mean(y)
 n <- length(y)
-
 
 ## Read results
 print("Reading saved results...")
@@ -204,24 +187,15 @@ names(hmc.df) <- param_names
 names(hmc_thin.df) <- param_names
 names(hmcw.df) <- param_names
 
-# true_vals.df <- data.frame(phi = phi, sigma_eta = sigma_eta)
-
 ## Posterior plots
-# param_values <- c(phi, sigma_eta)
-
 plots <- list()
 xlims <- list(c(0.96, 1), c(0.04, 0.25))
 for (p in 1:param_dim) {
-    # true_vals.df <- data.frame(name = param_names[p], val = param_values[p])
 
     plot <- ggplot(rvgaw.df, aes(x = .data[[param_names[p]]])) +
         geom_density(col = "red", lwd = 1) +
         geom_density(data = hmcw.df, col = "goldenrod", lwd = 1) +
         geom_density(data = hmc_thin.df, col = "deepskyblue", lwd = 1) +
-        # geom_vline(
-        #     data = true_vals.df, aes(xintercept = val),
-        #     color = "black", linetype = "dashed", linewidth = 1
-        # ) +
         labs(x = vars) +
         xlim(x = xlims[[p]]) +
         theme_bw() +
@@ -248,16 +222,10 @@ for (ind in 1:n_lower_tri) {
     p <- mat_ind[1]
     q <- mat_ind[2]
 
-    # param_df <- data.frame(x = param_values[q], y = param_values[p])
-
     cov_plot <- ggplot(rvgaw.df, aes(x = .data[[param_names[q]]], y = .data[[param_names[p]]])) +
         stat_ellipse(col = "red", type = "norm", lwd = 1) +
         stat_ellipse(data = hmcw.df, col = "goldenrod", type = "norm", lwd = 1) +
         stat_ellipse(data = hmc.df, col = "deepskyblue", type = "norm", lwd = 1) +
-        # geom_point(
-        #     data = param_df, aes(x = x, y = y),
-        #     shape = 4, color = "black", size = 5
-        # ) +
         theme_bw() +
         theme(axis.title = element_blank(), text = element_text(size = 24)) + # Assign pretty axis ticks
         scale_x_continuous(breaks = scales::pretty_breaks(n = 3))
@@ -335,10 +303,7 @@ if (plot_trajectories) {
     }
     mu_sigma_eta <- sqrt(exp(mu_sigma_eta))
 
-    # true_df <- data.frame(
-    #     param = c("phi", "sigma[eta]"),
-    #     value = c(phi, sigma_eta)
-    # )
+    block_df <- data.frame(cutoff = n_indiv)
 
     trajectory_df <- data.frame(phi = mu_phi, sigma_eta = mu_sigma_eta)
     names(trajectory_df) <- c("phi", "sigma[eta]")
@@ -351,39 +316,19 @@ if (plot_trajectories) {
     trajectory_plot <- trajectory_df_long %>% ggplot() +
         geom_line(aes(x = iter, y = value), linewidth = 1) +
         facet_wrap(~param, scales = "free", labeller = label_parsed) +
+        geom_vline(data = block_df, aes(xintercept = cutoff), linetype = "dotted", linewidth = 1.5) +
         # geom_hline(data = true_df, aes(yintercept = value), linetype = "dashed", linewidth = 1.5) +
         theme_bw() +
-        theme(text = element_text(size = 28)) +
+        theme(text = element_text(size = 34)) +
         xlab("Iterations") +
         ylab("Value")
 
-    png(paste0("plots/trajectories_sv_real", block_info, ".png"), width = 1000, height = 500)
+    png(paste0("plots/trajectories_sv_real", block_info, ".png"), width = 1200, height = 500)
     print(trajectory_plot)
 
     dev.off()
 
     par(mfrow = c(2,1))
-    # coda::traceplot(hmc.phi_mcmc, density = T)
-    # coda::traceplot(hmc.sigma_eta_mcmc, density = T)
-    # coda::traceplot(hmcw.phi_mcmc, density = T)
-    # coda::traceplot(hmcw.sigma_eta_mcmc, density = T)
-    
-    # true_df <- data.frame(
-    #     param = c("phi", "sigma[eta]"),
-    #     value = c(phi, sigma_eta)
-    # )
-
-    # hmc.df <- data.frame(
-    # phi = hmc.phi,
-    # sigma_eta = hmc.sigma_eta
-    # )
-    # names(hmc.df) <- param_names
-
-    # hmcw.df <- data.frame(
-    #     phi = hmcw.phi,
-    #     sigma_eta = hmcw.sigma_eta
-    # )
-    # names(hmcw.df) <- param_names    
     
     hmc.df_long <- hmc.df %>% 
         mutate(n = row_number()) %>% 
@@ -407,8 +352,6 @@ if (plot_trajectories) {
 
     ## Traceplots
     hmc.traceplot <- hmc.df_long %>% ggplot() + geom_line(aes(x = n, y = value), linewidth = 1) +
-        # geom_hline(data = true_df, aes(yintercept = value), col = "red", 
-        #             linetype = "dashed", linewidth = 1.5) +
         facet_wrap(~param, scales = "free", labeller = label_parsed) +
         theme_bw() +
         theme(text = element_text(size = 28)) +
@@ -418,8 +361,6 @@ if (plot_trajectories) {
     print(hmc.traceplot)
 
      hmc_thin.traceplot <- hmc_thin.df_long %>% ggplot() + geom_line(aes(x = n, y = value), linewidth = 1) +
-        # geom_hline(data = true_df, aes(yintercept = value), col = "red", 
-        #             linetype = "dashed", linewidth = 1.5) +
         facet_wrap(~param, scales = "free", labeller = label_parsed) +
         theme_bw() +
         theme(text = element_text(size = 28)) +

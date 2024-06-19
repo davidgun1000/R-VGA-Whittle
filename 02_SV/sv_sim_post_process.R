@@ -338,6 +338,8 @@ if (plot_trajectories) {
         value = c(phi, sigma_eta)
     )
 
+    block_df <- data.frame(cutoff = n_indiv)
+
     trajectory_df <- data.frame(phi = mu_phi, sigma_eta = mu_sigma_eta)
     names(trajectory_df) <- c("phi", "sigma[eta]")
     trajectory_df$iter <- 1:nrow(trajectory_df)
@@ -350,12 +352,13 @@ if (plot_trajectories) {
         geom_line(aes(x = iter, y = value), linewidth = 1) +
         facet_wrap(~param, scales = "free", labeller = label_parsed) +
         geom_hline(data = true_df, aes(yintercept = value), linetype = "dashed", linewidth = 1.5) +
+        geom_vline(data = block_df, aes(xintercept = cutoff), linetype = "dotted", linewidth = 1.5) +
         theme_bw() +
-        theme(text = element_text(size = 28)) +
+        theme(text = element_text(size = 34)) +
         xlab("Iterations") +
         ylab("Value")
 
-    png(paste0("plots/trajectories_sv_sim", block_info, ".png"), width = 1000, height = 500)
+    png(paste0("plots/trajectories_sv_sim", block_info, ".png"), width = 1200, height = 500)
     print(trajectory_plot)
 
     dev.off()

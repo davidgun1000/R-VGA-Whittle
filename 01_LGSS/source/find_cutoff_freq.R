@@ -35,16 +35,17 @@ find_cutoff_freq <- function(signal, nsegs, power_prop = 0.5, save_plots = FALSE
     pdg_df <- data.frame(freq = freq, pdg = pdg)
     pdg_welch_df <- data.frame(freq = freq_welch, pdg = pdg_welch)
 
+    ## Periodogram plot
     pdg_plot <- pdg_df %>% ggplot(aes(x = freq, y = pdg)) +
     geom_line() +
     geom_line(data = pdg_welch_df, aes(x = freq, y = pdg), 
                 color = "salmon", linewidth = 1.5) +
     geom_vline(xintercept = cutoff_freq_og, 
                 linetype = 2, color = "red", linewidth = 1) +
-    labs(x = "Frequency (rad/s)", y = "Power") +
+    labs(x = "Angular frequency (rad/s)", y = "Power") +
     xlim(c(0, 1)) +
     theme_bw() +
-    theme(text = element_text(size = 24))
+    theme(text = element_text(size = 28))
 
     print(pdg_plot)
 

@@ -34,7 +34,7 @@ result_directory <- "./results/blocksize_test/"
 ## Flags
 rerun_test <- F
 save_rvgaw_results <- F
-save_plots <- F
+save_plots <- T
 
 date <- "20230525"
 n <- 10000
@@ -69,7 +69,7 @@ power_prop <- 1/2
 nsegs <- 25
 welch_output <- find_cutoff_freq(y, nsegs = nsegs, power_prop = power_prop)
 n_indiv <- welch_output$cutoff_ind #500
-blocksizes <- c(0, 100) # c(0, 10, 50, 100, 300, 500, 1000)
+blocksizes <- c(0, 10, 50, 100, 300, 500, 1000)
 
 if (use_tempering) {
   n_temper <- 5
@@ -298,10 +298,10 @@ pdg_plot <- pdg_df %>% ggplot(aes(x = freq, y = pdg)) +
                                     linetype = 3, color = "cornflowerblue", linewidth = 1.5) +
                         geom_vline(xintercept = power10_cutoff, 
                                     linetype = 4, color = "mediumpurple", linewidth = 1.5) +
-                        labs(x = "Frequency (rad/s)", y = "Power") +
+                        labs(x = "Angular frequency (rad/s)", y = "Power") +
                         xlim(c(0, 1)) +
                         theme_bw() +
-                        theme(text = element_text(size = 24))
+                        theme(text = element_text(size = 28))
 if (save_plots) {
   png("./plots/blocksize_test/cutoff_freqs_lgss.png", width = 800, height = 400)
   print(pdg_plot)
