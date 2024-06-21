@@ -13,8 +13,11 @@ Each example is stored in one folder, which contains a `*_main.R` file for runni
 Each folder contains separate sub-folders:
 1. `source`, which contains associated R scripts needed for running R-VGA-Whittle, HMC-Whittle and HMC-exact algorithms on the model considered,
 2. `results`, which contains the R-VGA-Whittle, HMC-Whittle and HMC-exact output from the source code 
-3. `plots`, which contains the plots of the posterior densities and bivariate posterior plots for each parameter in the model considered,
-4. `var_test`, which contains the R code, output and plot for the test on the variance of the R-VGAL results for different Monte Carlo sample sizes (see Section S4 of the online supplement)
+3. `plots`, which contains the plots of the posterior densities and bivariate posterior plots for each parameter in the model considered.
+
+Each folder also contains a `compare_blocksizes.R` file, which is used to reproduce results in Section S3 of the online supplement.
+
+The linear Gaussian and univariate SV models also contain a `var_test` folder, which contains the R code, output and plot for the test on the variance of the R-VGA-Whittle results for different Monte Carlo sample sizes (see Section S4 of the online supplement).
 
 ## Running the scripts
 To reproduce the results in the manuscript, for example that of the linear Gaussian SSM, download the `01_LGSS` folder and run the `lgss_post_process.R` file. Note that the working directory needs to be set to the `01_LGSS` folder for the filepaths to work properly (and similarly, for other examples, set the working directory to the folder containing that example). 
