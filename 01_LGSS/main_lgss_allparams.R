@@ -59,12 +59,12 @@ date <- "20230525"
 regenerate_data <- F
 save_data <- F
 
-rerun_rvgaw <- T
+rerun_rvgaw <- F
 rerun_mcmcw <- F
 rerun_hmc <- F
 rerun_hmcw <- F
 
-save_rvgaw_results <- T
+save_rvgaw_results <- F
 save_mcmcw_results <- F
 save_hmc_results <- F
 save_hmcw_results <- F
