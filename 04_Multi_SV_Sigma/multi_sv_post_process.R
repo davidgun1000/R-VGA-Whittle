@@ -18,6 +18,7 @@ library(ggplot2)
 library(grid)
 library(gridExtra)
 library(gtable)
+library(latex2exp)
 
 source("./source/compute_periodogram.R")
 source("./source/compute_periodogram_uni.R")
@@ -26,7 +27,7 @@ source("./source/construct_Sigma.R")
 
 ## Flags
 # plot_trajectories <- T
-save_plots <- T
+save_plots <- F
 
 date <- "20240613" #"20240227" # "20230918" #the 20230918 version has sigma_eta = sqrt(0.1)
 use_cholesky <- T # use lower Cholesky factor to parameterise Sigma_eta
@@ -423,7 +424,7 @@ print(data.frame(method = c("R-VGA-Whittle", "HMC-Whittle", "HMC-exact"),
         geom_vline(data = block_df, aes(xintercept = cutoff), linetype = "dotted", linewidth = 1.5) +
         theme_bw() +
         theme(text = element_text(size = 28)) +
-        xlab("Iterations") +
+        xlab(TeX("Iterations ($\\tilde{k}$)")) +
         ylab("Value")
 
     if (save_plots) {

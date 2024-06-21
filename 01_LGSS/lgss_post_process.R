@@ -18,6 +18,7 @@ library(ggplot2)
 library(grid)
 library(gridExtra)
 library(gtable)
+library(latex2exp)
 
 source("./source/compute_periodogram.R")
 source("./source/find_cutoff_freq.R")
@@ -351,7 +352,7 @@ if (plot_trajectories) {
         geom_vline(data = block_df, aes(xintercept = cutoff), linetype = "dotted", linewidth = 1.5) +
         theme_bw() +
         theme(text = element_text(size = 28)) +
-        xlab("Iterations") +
+        xlab(TeX("Iteration ($\\tilde{k}$)")) +
         ylab("Value")
 
     png(paste0("plots/trajectories_lgss", block_info, ".png"), width = 1500, height = 400)

@@ -26,8 +26,6 @@ source("./source/run_mcmc_sv.R")
 source("./source/run_hmc_sv.R")
 source("./source/compute_periodogram.R")
 source("./source/find_cutoff_freq.R")
-# source("./source/run_corr_pmmh_sv.R")
-# source("./source/particleFilter.R")
 
 # List physical devices
 gpus <- tf$config$experimental$list_physical_devices('GPU')
@@ -160,49 +158,9 @@ if (plot_likelihood_surface) {
   abline(v = sigma_eta, lty = 2)
   abline(v = param_grid[which.max(llh2)], col = "red", lty = 2)
 
-  browser()
 }
 
-# # Test exact likelihood
-# phi_grid <- seq(0.01, 0.99, length.out = 100)
-# llh <- c()
-# 
-# for (k in 1:length(phi_grid)) {
-#   params_pf <- list(phi = phi_grid[k], sigma_eta = sigma_eta, sigma_eps = sigma_eps,
-#                     sigma_xi = sqrt(pi^2/2))
-#   pf_out <- particleFilter(y = y, N = 100, iniState = 0, param = params_pf)
-#   llh[k] <- pf_out$log_likelihood
-# }
-# 
-# plot(phi_grid, llh, type = "l")
-# abline(v = phi_grid[which.max(llh)], col = "red", lty = 2)
-# 
-# browser()
 
-# ## Periodogram smoothing
-# pdg <- compute_periodogram(y)
-# freq <- pdg$freq
-# pdg_original <- pdg$periodogram
-
-# y_tilde <- log(y^2) - mean(y)
-# pdg_welch <- compute_welch_psd(y_tilde, nperseg = 500, p_overlap = 0.5)
-# freq_welch <- pdg_welch$freq
-# pdg_smoothed <- pdg_welch$pdg
-
-# plot(freq, pdg_original, type = "l")
-# lines(freq_welch, pdg_smoothed, col = "red")
-
-# dB <- 10 * log10(pdg_smoothed)
-# half_power <- 10*log10(max(pdg_smoothed)/4)
-# beyond_half <- which(dB >= half_power)#[1]
-# cutoff <- beyond_half[length(beyond_half)] # the 3dB cutoff is the last frequency bin with above half power
-
-# cutoff_freq <- freq_welch[cutoff]
-# cutoff_freq_original <- freq[freq >= cutoff_freq][1]
-# cutoff_ind_og <- which(freq == cutoff_freq_original)
-
-# plot(pdg_original, type = "l")
-# abline(v = cutoff_ind_og, lty = 2, lwd = 2, col = "red")
 
 ########################################
 ##                Prior               ##
@@ -233,7 +191,7 @@ if (plot_prior) {
 }
 
 ########################################
-##                R-VGA               ##
+##            R-VGA-Whitle            ##
 ########################################
 
 S <- 1000L
@@ -305,68 +263,9 @@ rvgaw.post_samples_phi <- rvgaw_results$post_samples$phi
 rvgaw.post_samples_sigma_eta <- rvgaw_results$post_samples$sigma_eta
 # rvgaw.post_samples_xi <- rvgaw_results$post_samples$sigma_xi
 
-########################################
-##                MCMC                ## 
-########################################
-
-mcmcw_filepath <- paste0(result_directory, "mcmc_whittle_results_n", n, 
-                         "_phi", phi_string, prior_type, "_", date, ".rds")
-
-adapt_proposal <- T
-
-# n_post_samples <- 10000
-# burn_in <- 1000
-MCMC_iters <- (n_post_samples + burn_in) * n_chains
-
-# prior_mean <- rep(0, 3)
-# prior_var <- diag(c(1, 1, 0.01))
-
-# prior_samples <- rmvnorm(10000, prior_mean, prior_var)
-# prior_samples_phi <- tanh(prior_samples[, 1])                                       
-# hist(prior_samples_sigma_xi)
-
-if (rerun_mcmcw) {
-  mcmcw_results <- run_mcmc_sv(y, #sigma_eta, sigma_eps, 
-                               iters = MCMC_iters, burn_in = burn_in,
-                               prior_mean = prior_mean, prior_var = prior_var,  
-                               state_ini_mean = state_ini_mean, state_ini_var = state_ini_var,
-                               adapt_proposal = T, use_whittle_likelihood = T,
-                               transform = transform)
-  
-  if (save_mcmcw_results) {
-    saveRDS(mcmcw_results, mcmcw_filepath)
-  }
-} else {
-  mcmcw_results <- readRDS(mcmcw_filepath)
-}
-
-mcmcw.post_samples_phi <- as.mcmc(mcmcw_results$post_samples$phi[-(1:burn_in)])
-mcmcw.post_samples_eta <- as.mcmc(mcmcw_results$post_samples$sigma_eta[-(1:burn_in)])
-# mcmcw.post_samples_xi <- as.mcmc(mcmcw_results$post_samples$sigma_xi[-(1:burn_in)])
-
-# par(mfrow = c(2,1))
-# coda::traceplot(mcmcw.post_samples_phi, main = "Trace plot for phi")
-# coda::traceplot(mcmcw.post_samples_eta, main = "Trace plot for sigma_eta")
-# # traceplot(mcmcw.post_samples_xi, main = "Trace plot for sigma_xi")
-# 
-# par(mfrow = c(1,2))
-# plot(density(mcmcw.post_samples_phi), main = "Posterior of phi", 
-#      col = "blue", lty = 2, lwd = 3)
-# lines(density(rvgaw.post_samples_phi), col = "red", lty = 2, lwd = 3)
-# abline(v = phi, lty = 3)
-# legend("topleft", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
-#        col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
-# 
-# plot(density(mcmcw.post_samples_eta), main = "Posterior of sigma_eta", 
-#      col = "blue", lty = 2, lwd = 3)
-# lines(density(rvgaw.post_samples_sigma_eta), col = "red", lty = 2, lwd = 3)
-# abline(v = sigma_eta, lty = 3)
-# legend("topright", legend = c("MCMC exact", "MCMC Whittle", "R-VGA Whittle"),
-#        col = c("blue", "blue", "red"), lty = c(1, 2, 2), cex = 0.7)
-
-#################################################
-###         HMC with exact likelihood         ###
-#################################################
+###############################
+##         HMC-exact         ##
+###############################
 
 hmc_filepath <- paste0(result_directory, "hmc_results_n", n, 
                          "_phi", phi_string, "_", date, ".rds")
@@ -391,7 +290,6 @@ if (rerun_hmc) {
   hmc_results <- readRDS(hmc_filepath)
 }
 
-
 # hmc.fit <- extract(hfit, pars = c("theta_phi", "theta_sigma"),
 #                    permuted = F)
 # 
@@ -401,35 +299,19 @@ if (rerun_hmc) {
 hmc.post_samples_phi <- c(hmc_results$draws[,,1])#tanh(hmc.theta_phi)
 hmc.post_samples_sigma_eta <- c(hmc_results$draws[,,2])#sqrt(exp(hmc.theta_sigma))
 
-########################################################
-##          HMC with the Whittle likelihood           ##
-########################################################
+#####################################
+##          HMC-Whittle            ##
+#####################################
 hmcw_filepath <- paste0(result_directory, "hmcw_results_n", n, 
                          "_phi", phi_string, "_", date, ".rds")
 
 if (rerun_hmcw) {
   
-  # n_chains <- 2
-  # hmc_iters <- n_post_samples / n_chains
-  # burn_in <- 5000 # per chain
-
   # Compute periodogram
   y_tilde <- log(y^2) - mean(log(y^2))
   pgram_out <- compute_periodogram(y_tilde)
   freq <- pgram_out$freq
   I <- pgram_out$periodogram
-
-  # ## Fourier frequencies
-  # k <- seq(-ceiling(n/2)+1, floor(n/2), 1)
-  # k_in_likelihood <- k[k >= 1 & k <= floor((n-1)/2)]
-  # freq <- 2 * pi * k_in_likelihood / n
-
-  # ## Fourier transform of the observations
-  # y_tilde <- log(y^2) - mean(log(y^2))
-
-  # fourier_transf <- fft(y_tilde)
-  # periodogram <- 1/n * Mod(fourier_transf)^2
-  # I <- periodogram[k_in_likelihood + 1]
 
   whittle_stan_file <- "./source/stan_sv_whittle.stan"
   # whittle_stan_file <- "./source/stan_mwe.stan" # this was to test the use of complex numbers
@@ -474,3 +356,11 @@ if (rerun_hmcw) {
 hmcw.post_samples_phi <- c(hmcw_results$draws[,,1])
 hmcw.post_samples_sigma_eta <- c(hmcw_results$draws[,,2])
 
+# ## Timing comparison
+# rvgaw.time <- rvgaw_results$time_elapsed[3]
+# hmcw.time <- sum(hmcw_results$time()$chains$total)
+# hmc.time <- sum(hmc_results$time()$chains$total)
+# print(data.frame(
+#     method = c("R-VGA-Whittle", "HMC-Whittle", "HMC-exact"),
+#     time = c(rvgaw.time, hmcw.time, hmc.time)
+# ))

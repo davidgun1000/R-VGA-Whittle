@@ -49,8 +49,8 @@ if (length(gpus) > 0) {
 }
 
 ## Flags
-rerun_rvgaw <- F
-save_results <- F
+rerun_rvgaw <- T
+save_results <- T
 use_tempering <- T
 temper_first <- T
 reorder <- 0 #"decreasing" # or decreasing # or a number
@@ -86,9 +86,9 @@ prior_var <- diag(c(0.5, 0.5)) #diag(1, 2)
 ########################################
 
 runs <- 10
-S <- 100L
+S <- 1000L
 n_post_samples <- 10000
-blocksize <- 500
+blocksize <- 100
 power_prop <- 1/2
 n_indiv <- find_cutoff_freq(y, nsegs = 25, power_prop = power_prop)$cutoff_ind #500
 # n_indiv <- 100

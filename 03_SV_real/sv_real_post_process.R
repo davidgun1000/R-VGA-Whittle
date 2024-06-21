@@ -11,6 +11,7 @@ library(ggplot2)
 library(grid)
 library(gridExtra)
 library(gtable)
+library(latex2exp)
 
 source("./source/compute_periodogram.R")
 source("./source/find_cutoff_freq.R")
@@ -320,7 +321,7 @@ if (plot_trajectories) {
         # geom_hline(data = true_df, aes(yintercept = value), linetype = "dashed", linewidth = 1.5) +
         theme_bw() +
         theme(text = element_text(size = 34)) +
-        xlab("Iterations") +
+        xlab(TeX("Iterations ($\\tilde{k}$)")) +
         ylab("Value")
 
     png(paste0("plots/trajectories_sv_real", block_info, ".png"), width = 1200, height = 500)

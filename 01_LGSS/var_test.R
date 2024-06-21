@@ -26,7 +26,7 @@ source("./source/find_cutoff_freq.R")
 # source("./source/update_sigma.R")
 # source("./source/run_hmc_lgss.R")
 
-rerun_rvgaw <- T
+rerun_rvgaw <- F
 save_results <- F
 use_tempering <- T
 temper_first <- T
@@ -60,13 +60,13 @@ prior_var <- diag(c(1, 1, 1))
 n_post_samples <- 10000
 runs <- 10
 # mc_samples <- c(100L, 500L, 1000L, 5000L)
-S <- 1000L
+S <- 100L
 
 # nblocks <- 100
 power_prop <- 1/2
 n_indiv <- find_cutoff_freq(y, nsegs = 25, power_prop = power_prop)$cutoff_ind #500
 # n_indiv <- 1000 #807
-blocksize <- 500 #floor((n-1)/2) - n_indiv 
+blocksize <- 100 #floor((n-1)/2) - n_indiv 
 
 if (use_tempering) {
   n_temper <- 5

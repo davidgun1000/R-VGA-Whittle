@@ -12,12 +12,13 @@ library(coda)
 # library(keras)
 # library(stats)
 # library(bspec)
-# library(tidyr)
+library(tidyr)
 library(dplyr)
 library(ggplot2)
 library(grid)
 library(gridExtra)
 library(gtable)
+library(latex2exp)
 
 source("./source/compute_periodogram.R")
 source("./source/find_cutoff_freq.R")
@@ -39,7 +40,7 @@ plot_likelihood_surface <- F
 prior_type <- ""
 transform <- "arctanh"
 plot_trajectories <- T
-save_plots <- T
+save_plots <- F
 
 # n_post_samples <- 10000 # per chain
 # burn_in <- 5000 # per chain
@@ -355,7 +356,7 @@ if (plot_trajectories) {
         geom_vline(data = block_df, aes(xintercept = cutoff), linetype = "dotted", linewidth = 1.5) +
         theme_bw() +
         theme(text = element_text(size = 34)) +
-        xlab("Iterations") +
+        xlab(TeX("Iteration ($\\tilde{k}$)")) +
         ylab("Value")
 
     png(paste0("plots/trajectories_sv_sim", block_info, ".png"), width = 1200, height = 500)
