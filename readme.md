@@ -28,13 +28,7 @@ Results from Section S4 of the online supplement can be reproduced by running th
 The RStudio version and R packages required to run the code, along with installation instructions for these packages, can be found in the next section. 
 
 ## RStudio version requirements
-[]: # (In order to run the HMC code, which was implemented in RStan 2.21, it is highly recommended that you install R version 4.0 or 4.1. The latest released version of RStan at the time of writing is 2.21, which is not yet compatible with R 4.2 and above. There is an RStan development version, 2.26.x, which can be configured to work with R 4.2, but the code in this repository has not been tested on such a configuration.)
-
-In order to run the code, it is highly recommended that you install R version 4.1 or above. The code in this repository was written using R version 4.1 and RStan version 2.21. This code has also been tested and found compatible with R version 4.3 and RStan version 2.26, which are the latest available versions of R and RStan at the time of writing.
-
-Note that prior to installing RStan, you need to configure your R installation to be able to compile C++ code. For instructions, see [RStan Getting Started](https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started) under **Configuring C++ Toolchain**. Note that instructions vary depending on your operating system, and if you are using Windows, instructions will also vary depending on your R version (3.6/4.0/4.2). 
-
-The R-VGAL code requires the R package `tensorflow`. It is recommended that you install `tensorflow` version 2.14 or above. First, install the `tensorflow` R package as follows:
+The code in this repository was written using R version 4.3. Running R-VGA-Whittle requires the R package `tensorflow`. It is recommended that you install `tensorflow` version 2.14 or above. First, install the `tensorflow` R package as follows:
 
 ```
 install.packages("tensorflow")
@@ -48,12 +42,19 @@ which will install `tensorflow` v2.14. If prompted to install Miniconda, select 
 
 System requirements and a more detailed installation guide for `tensorflow` in R can be found [here](https://tensorflow.rstudio.com/install). 
 
+Running the HMC-Whittle and HMC-exact code requires CmdStanR version 0.7.1. For instructions on how to install CmdStanR, see [Getting Started with CmdStanR](https://mc-stan.org/cmdstanr/articles/cmdstanr.html#introduction)).
+
 ## Package requirements 
 Running the source code requires the following packages (along with their dependencies, which should be installed automatically):
 1. `tensorflow` v2.14
-2. `rstan` v2.26.23 (for instructions on how to install RStan, see [RStan Getting Started](https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started))
-3. `ggplot2` v3.4.4
-4. `gridExtra` v2.3
-5. `gtable` v0.3.4         
-6. `mvtnorm` v1.2
-7. `dplyr` v1.1.4
+2. `keras` v2.13.0
+3. `cmdstanr` v0.7.1 
+4. `coda` v0.19-4
+5. `mvtnorm` v1.2
+6. `Matrix` v1.6-5
+7. `tidyr` v1.3.1
+8. `dplyr` v1.1.4
+9. `ggplot2` v3.4.4
+10. `gridExtra` v2.3
+11. `gtable` v0.3.4         
+ 
