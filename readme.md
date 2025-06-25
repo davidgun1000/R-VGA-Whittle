@@ -1,4 +1,4 @@
-# R-VGA-Whittle * (Vu, B. A., Gunawan, D., and Suesse, T.
+# R-VGA-Whittle * (Vu, B. A., Gunawan, D., and Suesse, T.)
 
 This folder contains R code for the 5 examples in the R-VGA-Whittle manuscript: 
 1. the linear Gaussian state space model (SSM) with simulated data, 
